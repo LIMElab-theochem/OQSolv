@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oqs-pcm-tool"
+version = "0.1.0"
+description = "Python refactor of Mathematica scripts for normal-mode potentials and OQS-PCM calculations."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "matplotlib>=3.8",
+  "numpy>=1.26",
+  "sympy>=1.12",
+]
+
+[project.scripts]
+oqs-pcm = "oqs_pcm.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

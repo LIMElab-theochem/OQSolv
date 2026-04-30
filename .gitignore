@@ -1,0 +1,23 @@
+.venv/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+old_sources/
+references/
+Mathematica_references/
+output_*/
+
+# Local HCl/water input and diagnostic data are kept outside the source commit.
+Lambda.dat
+Sm12T.dat
+T.dat
+cavity.inp
+ci_energy.inp
+ci_pot.inp
+factoreps.dat
+mat_SD.inp
+
+testsuite/hcl_water_pcm/current_*/
+testsuite/hcl_water_pcm/reference/

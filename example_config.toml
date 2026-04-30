@@ -1,0 +1,37 @@
+[paths]
+mat_sd = "/path/to/mat_SD.inp"
+cavity = "/path/to/cavity.inp"
+ci_potential = "/path/to/ci_pot.inp"
+normal_mode_potential = "/path/to/ci_pot_normal_mode.inp"
+ci_energy = "/path/to/ci_energy.inp"
+sm12t = "/path/to/Sm12T.dat"
+lambda_file = "/path/to/Lambda.dat"
+output_dir = "./output"
+
+[problem]
+nsts = 601
+diagonalization_states = 50
+resolution_of_identity_states = 601
+corrected_states = 10
+convergence_tolerance = 1e-6
+mixing_window = 10
+cutoff = 0.299561
+optical_window_min_ev = 1.63
+optical_window_max_ev = 3.26
+hartree_to_ev = 27.2114
+
+[execution]
+build_cavity_mode_basis = true
+build_potential_modes = true
+solve_oqs_pcm = true
+solve_inertial_basis = false
+reuse_inertial_cache = true
+write_text_exports = true
+
+[dielectric]
+debye_c = [0.47, 72.62]
+debye_g = [146198.83040935672, 12531.328320802005]
+drude_w = [0.000846, 0.00419, 0.0212, 0.0625, 0.0849, 0.204, 0.418, 8.34, 9.5, 10.41, 11.67, 12.95, 14.13, 15.5, 17.17, 18.89, 21.45, 30.06, 49.45]
+drude_c = [0.259, 1.04, 1.62, 0.555, 0.238, 0.0134, 0.0717, 0.0447, 0.0327, 0.0466, 0.0667, 0.0742, 0.093, 0.0779, 0.079, 0.0418, 0.107, 0.133, 0.0566]
+drude_g = [0.000392, 0.00743, 0.026, 0.0398, 0.0299, 0.00843, 0.0341, 0.75, 1.12, 1.26, 1.58, 1.65, 1.86, 2.22, 2.7, 2.82, 6.87, 18.28, 36.28]
+optical_drude_start_index = 8

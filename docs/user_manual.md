@@ -12,7 +12,8 @@ The broader original workflow also contains two important preprocessing stages:
 
 - `lambda_sm12t.nb`, which prepares `Sm12T.dat` and `Lambda.dat`
 - `dipoles.nb`, which completes the dipole data later used by the Onsager
-  branch and by oscillator-strength postprocessing
+  branch and by oscillator-strength postprocessing. In OQSolv this standalone
+  utility is called Xdip.
 
 There are two related model families in the broader workflow:
 
@@ -133,7 +134,10 @@ Practical notes:
 - In the original workflow, `dipoles.nb` prepared the completed `ci_mut.inp`
   from MO coefficients, dipole integrals, TDDFT amplitudes, and nuclear
   geometry.  The limited GAMESS log extraction of GS-ES dipoles is only a
-  reference check, not a required input to that reconstruction.
+  reference check, not a required input to that reconstruction. The Python
+  utility that performs this completion is Xdip.
+- For LR-TDDFT data that lack ES-ES and excited-state dipoles, inspect Xdip
+  with `oqs-pcm xdip --help`.
 - In the original workflow, `Sm12T.dat` and `Lambda.dat` were prepared
   upstream from cavity geometry and cavity matrices.
 

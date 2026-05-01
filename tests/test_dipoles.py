@@ -2,7 +2,7 @@ from pathlib import Path
 
 import numpy as np
 
-from oqs_pcm.dipoles import (
+from oqs_pcm.dipole_algebra import (
     dipoles_assemble_completed_state_transition_tensor,
     dipoles_build_occupied_virtual_indices,
     dipoles_build_slater_dipole_matrices,

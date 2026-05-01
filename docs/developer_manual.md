@@ -47,6 +47,8 @@ The correct abstraction boundary is the coupling construction:
 - `src/oqs_pcm/io.py`: low-level text input and output helpers.
 - `src/oqs_pcm/potential.py`: PCM-specific loaders and transformations for state/transition electrostatic-potential tensors.
 - `src/oqs_pcm/dielectric.py`: dielectric model and direct PCM-kernel construction from `Lambda.dat`.
+- `src/oqs_pcm/dipole_algebra.py`: low-level dipole algebra reconstructed from `dipoles.nb`.
+- `src/oqs_pcm/dipole_completion.py`: Xdip, the standalone utility layer for completing `ci_mut.inp` from LR-TDDFT dipole ingredients.
 - `src/oqs_pcm/solver.py`: OQS-PCM solver variants.
 - `src/oqs_pcm/models/`: model-specific coupling builders over the shared solver engine.
   `pcm.py` and `onsager.py` are the intended symmetry point.
@@ -87,7 +89,8 @@ Mathematica's `eigen[[2]]`.
 
 ### `dipoles.nb`
 
-This notebook is part of the general dipole-observable preprocessing path.
+This notebook is now represented by Xdip, the standalone dipole-completion
+utility. It is part of the general dipole-observable preprocessing path.
 
 - It starts from a limited dipole dataset, historically obtained from a
   GAMESS-US workflow in which only ground-state to excited-state transition
@@ -104,6 +107,14 @@ because those quantities depend on state/transition electric dipole moments in
 the appropriate basis.  The limited `ci_mut.awk` extraction from a GAMESS-US log
 is not the source of the completed tensor; it is a diagnostic reference for the
 ground-state to excited-state transition dipoles.
+
+Layering:
+
+- `dipole_algebra.py` contains the reusable scientific primitives.
+- `dipole_completion.py` contains Xdip's operational workflow, file writing,
+  and optional GS-ES diagnostics.
+- GAMESS-specific parsing remains separate so file-format concerns do not
+  obscure the validated dipole algebra.
 
 ## Naming Convention
 

@@ -32,6 +32,15 @@ next public repository update or Zenodo archival release.
 - Add a clear user-facing warning when spectra generation is requested but the
   completed state/transition dipole file is missing.
 
+## Xdip Dipole Completion
+
+- Validate the standalone Xdip run against Mathematica-generated
+  `dipoles.nb` outputs before treating it as production-ready for new
+  LR-TDDFT systems.
+- Add a small trusted Xdip reference dataset once that validation is complete.
+- Add validated GAMESS-US parser coverage for the raw AO dipole integrals, MO
+  coefficients, and TDDFT `X`/`Y` amplitudes that feed Xdip.
+
 ## Memory Safety And HPC Improvements
 
 - The current Docker container reported:

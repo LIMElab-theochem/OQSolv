@@ -32,6 +32,7 @@ See:
 
 - `docs/user_manual.md`
 - `docs/developer_manual.md`
+- `docs/dipole_completion.md` for the standalone Xdip dipole-completion utility
 - `example_config.toml`
 
 Typical command sequence:

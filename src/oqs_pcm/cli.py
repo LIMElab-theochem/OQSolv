@@ -4,6 +4,11 @@ import argparse
 from pathlib import Path
 
 from oqs_pcm.config import load_config
+from oqs_pcm.dipole_completion import (
+    compare_ground_transition_dipoles_to_reference,
+    complete_ci_mut_file,
+    load_dipole_completion_inputs_from_npy,
+)
 from oqs_pcm.gamess import (
     gamess_extract_ci_energies,
     gamess_extract_potential_block,
@@ -113,6 +118,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output path for the diagnostic GS-ES dipole reference extracted from the log.",
     )
 
+    dipoles_parser = subparsers.add_parser(
+        "xdip",
+        aliases=["complete-dipoles"],
+        help="Run Xdip: reconstruct a completed ci_mut.inp from LR-TDDFT dipole ingredients.",
+    )
+    dipoles_parser.add_argument("--ao-dipoles", type=Path, required=True, help="NumPy .npy file with AO dipole integrals, shape (nao, nao, 3).")
+    dipoles_parser.add_argument("--mo-coefficients", type=Path, required=True, help="NumPy .npy file with MO coefficients, shape (nmo, nao).")
+    dipoles_parser.add_argument("--x-amplitudes", type=Path, required=True, help="NumPy .npy file with TDDFT X amplitudes, shape (nstates, n_ov).")
+    dipoles_parser.add_argument("--y-amplitudes", type=Path, required=True, help="NumPy .npy file with TDDFT Y amplitudes, shape (nstates, n_ov).")
+    dipoles_parser.add_argument("--n-occupied", type=int, required=True, help="Number of occupied MOs in the closed-shell reference.")
+    dipoles_parser.add_argument("--n-frozen-occupied", type=int, default=0, help="Number of frozen occupied MOs excluded from the LR excitation space.")
+    dipoles_parser.add_argument(
+        "--nuclear-dipole",
+        type=float,
+        nargs=3,
+        required=True,
+        metavar=("MUX", "MUY", "MUZ"),
+        help="Nuclear dipole contribution in atomic units.",
+    )
+    dipoles_parser.add_argument("--output", type=Path, required=True, help="Output completed ci_mut.inp path.")
+    dipoles_parser.add_argument(
+        "--reference-ci-mut",
+        type=Path,
+        help="Optional limited ci_mut.inp containing native GAMESS GS-ES dipoles for diagnostics.",
+    )
+
     return parser
 
 
@@ -213,6 +244,28 @@ def main() -> None:
             rows = gamess_extract_reference_ground_excited_dipoles(args.log_file)
             gamess_write_reference_ground_excited_dipoles(args.reference_ci_mut, rows)
             print(f"Wrote {len(rows)} diagnostic GS-ES dipoles to {args.reference_ci_mut}")
+        return
+
+    if args.command in {"xdip", "complete-dipoles"}:
+        inputs = load_dipole_completion_inputs_from_npy(
+            ao_dipoles_path=args.ao_dipoles,
+            mo_coefficients_path=args.mo_coefficients,
+            x_amplitudes_path=args.x_amplitudes,
+            y_amplitudes_path=args.y_amplitudes,
+            n_occupied=args.n_occupied,
+            n_frozen_occupied=args.n_frozen_occupied,
+            nuclear_dipole=args.nuclear_dipole,
+        )
+        tensor = complete_ci_mut_file(output_path=args.output, inputs=inputs)
+        print(f"Completed state/transition dipoles written to {args.output}")
+        print(f"Tensor shape: {tensor.shape}")
+        if args.reference_ci_mut is not None:
+            diagnostics = compare_ground_transition_dipoles_to_reference(tensor, args.reference_ci_mut)
+            print(f"Compared GS-ES transitions: {diagnostics.compared_transitions}")
+            print(
+                "Max abs GS-ES difference: "
+                f"{diagnostics.max_abs_ground_transition_difference:.16e}"
+            )
         return
 
 

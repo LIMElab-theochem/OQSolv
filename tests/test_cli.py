@@ -73,3 +73,33 @@ def test_cli_parser_accepts_memory_estimate_command() -> None:
 
     assert args.command == "estimate-memory"
     assert str(args.config) == "example_config.toml"
+
+
+def test_cli_parser_accepts_xdip_command() -> None:
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "xdip",
+            "--ao-dipoles",
+            "ao.npy",
+            "--mo-coefficients",
+            "mo.npy",
+            "--x-amplitudes",
+            "x.npy",
+            "--y-amplitudes",
+            "y.npy",
+            "--n-occupied",
+            "5",
+            "--nuclear-dipole",
+            "1.0",
+            "2.0",
+            "3.0",
+            "--output",
+            "ci_mut_gral.inp",
+        ]
+    )
+
+    assert args.command == "xdip"
+    assert str(args.ao_dipoles) == "ao.npy"
+    assert args.n_occupied == 5
+    assert args.nuclear_dipole == [1.0, 2.0, 3.0]

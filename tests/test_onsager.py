@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from oqs_pcm.io import io_load_onsager_transition_dipole_tensor
+from oqs_pcm.io import io_load_state_transition_dipole_tensor
 from oqs_pcm.models.onsager import build_onsager_cutoff_mask, build_onsager_diagonal_kernel, onsager_reaction_factor
 
 
@@ -20,7 +20,7 @@ def test_load_transition_dipoles_builds_symmetric_tensor(tmp_path: Path) -> None
         encoding="utf-8",
     )
 
-    tensor = io_load_onsager_transition_dipole_tensor(data_path, nsts=3, state_offset=1)
+    tensor = io_load_state_transition_dipole_tensor(data_path, nsts=3, state_offset=1)
 
     assert tensor.shape == (4, 4, 3)
     assert np.allclose(tensor[1, 2], [0.1, 0.2, 0.3])

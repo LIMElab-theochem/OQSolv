@@ -117,9 +117,10 @@ Minimal format summary:
 - PCM `ci_pot.inp`:
   text file containing state/transition electrostatic potentials on PCM cavity
   tesserae
-- Onsager `ci_mut.inp`:
-  text file containing state/transition electric dipole moments, with the last
-  three columns giving the Cartesian components
+- Completed `ci_mut.inp`:
+  text file containing general state/transition electric dipole moments.  It is
+  used by OQS-Onsager coupling and by oscillator-strength postprocessing for
+  OQS-PCM and OQS-Onsager.
 - `Sm12T.dat`:
   numeric transformation matrix for the PCM normal-mode step
 - `Lambda.dat`:
@@ -129,8 +130,10 @@ Practical notes:
 
 - `ci_energy.inp` contains excitation energies only, so the program treats the
   ground-state reference energy separately.
-- In the original workflow, the completed `ci_mut.inp` used by Onsager-style
-  calculations was prepared upstream from a more limited dipole dataset.
+- In the original workflow, `dipoles.nb` prepared the completed `ci_mut.inp`
+  from MO coefficients, dipole integrals, TDDFT amplitudes, and nuclear
+  geometry.  The limited GAMESS log extraction of GS-ES dipoles is only a
+  reference check, not a required input to that reconstruction.
 - In the original workflow, `Sm12T.dat` and `Lambda.dat` were prepared
   upstream from cavity geometry and cavity matrices.
 
@@ -156,11 +159,71 @@ Run both steps:
 oqs-pcm run my_config.toml --mode all
 ```
 
+Estimate memory before a large run:
+
+```bash
+oqs-pcm estimate-memory my_config.toml
+```
+
+For large PCM systems, run this before `--mode potential-modes` or `--mode all`.
+OQSolv will also perform the same safety check automatically before allocating
+the dense normal-mode potential arrays.
+
 Render all integrated figures from a directory of figure-ready text files:
 
 ```bash
 oqs-pcm figures all /path/to/figure_tables /path/to/output_figures
 ```
+
+Generate the figure-ready text files from OQSolv solver outputs:
+
+```bash
+oqs-pcm postprocess my_config.toml
+```
+
+The `postprocess` command is the Python replacement for the relevant export
+logic in `figures-new.nb`. It reads `newenergies.dat` and `newstates.dat` from
+the solver output directories, applies the internally computed reference
+polarization shift `ww`, applies the external `delta_scf` shift from the TOML
+file, and writes the reduced text tables consumed by the figure commands.
+
+The corresponding TOML section is:
+
+```toml
+[postprocess]
+output_dir = "./figure_tables"
+dipoles = "ci_mut.inp"
+delta_scf = -0.0063860537
+```
+
+`ww` is not a user option because it must remain coherent with the PCM kernel
+and normal-mode potential used by the current OQSolv run.
+
+`delta_scf` follows the Mathematica notebook convention:
+
+```text
+delta_scf = <Psi|H(0) + V/2|Psi>_solvent - <Psi|H(0)|Psi>_gas
+```
+
+It must be taken from the upstream in-solvent and in-vacuo electronic-structure
+calculations. OQSolv does not infer it from `newenergies.dat`.
+
+## Memory Safety
+
+Large PCM jobs can require several dense arrays with shape roughly
+`nsts x nsts x nts`, where `nsts` is the total number of electronic states and
+`nts` is the number of PCM tesserae. Configure safety limits in TOML:
+
+```toml
+[safety]
+max_memory_gb = 24.0
+min_available_memory_gb = 4.0
+memory_safety_factor = 2.5
+```
+
+`max_memory_gb` is also installed as a process address-space limit on supported
+systems. This is meant to fail the OQSolv process before the operating system
+becomes unstable.
 
 Render one figure family only:
 
@@ -176,6 +239,12 @@ Each result directory contains:
 
 - `newenergies.dat`
 - `newstates.dat`
+
+The postprocessing command writes reduced table files such as:
+
+- absolute level-energy tables: `ensspol.txt`, `encorr1.txt`, `encorr2.txt`, `en.txt`, `enbo.txt`
+- spectra tables: `sspol.txt`, `full.txt`, `bo.txt`, `cut.txt`, `fit.txt`
+- optional convergence tables: `GSsolfull.txt`, `GSsolcut.txt`, `GSsolfit.txt`, `GSsolbo.txt`
 
 ## Notes
 

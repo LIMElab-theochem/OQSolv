@@ -7,6 +7,10 @@ The package now also includes the figure-generation workflow that was previously
 split between relevant parts of `figures-new.nb` and the standalone scripts in
 `python_graphs/`.
 
+The relevant table-generation cells from `figures-new.nb` are also represented
+in Python: OQSolv can now convert raw solver outputs into the reduced text
+tables used by the integrated figure renderers.
+
 The original Mathematica project also contains two upstream preprocessing
 notebooks that belong to the same overall workflow:
 
@@ -29,3 +33,11 @@ See:
 - `docs/user_manual.md`
 - `docs/developer_manual.md`
 - `example_config.toml`
+
+Typical command sequence:
+
+```bash
+oqs-pcm run example_config.toml --mode all
+oqs-pcm postprocess example_config.toml
+oqs-pcm figures all figure_tables figures
+```

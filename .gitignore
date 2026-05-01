@@ -5,9 +5,11 @@ __pycache__/
 *.egg-info/
 
 old_sources/
+awks/
 references/
 Mathematica_references/
 output_*/
+validation_snapshots/
 
 # Local HCl/water input and diagnostic data are kept outside the source commit.
 Lambda.dat
@@ -15,6 +17,8 @@ Sm12T.dat
 T.dat
 cavity.inp
 ci_energy.inp
+ci_mut.inp
+ci_mut_gral.inp
 ci_pot.inp
 factoreps.dat
 mat_SD.inp

@@ -52,11 +52,27 @@ class DielectricConfig:
 
 
 @dataclass(slots=True)
+class PostprocessConfig:
+    output_dir: Path | None
+    dipoles: Path | None
+    delta_scf: float
+
+
+@dataclass(slots=True)
+class SafetyConfig:
+    max_memory_gb: float
+    min_available_memory_gb: float
+    memory_safety_factor: float
+
+
+@dataclass(slots=True)
 class AppConfig:
     paths: PathsConfig
     problem: ProblemConfig
     execution: ExecutionConfig
     dielectric: DielectricConfig
+    postprocess: PostprocessConfig
+    safety: SafetyConfig
 
 
 def validate_runtime_dimensions(problem: ProblemConfig) -> None:
@@ -110,12 +126,25 @@ def load_config(path: str | Path) -> AppConfig:
     execution_data.setdefault("reuse_inertial_cache", True)
 
     paths_data = {key: Path(value) for key, value in data["paths"].items()}
+    postprocess_data = dict(data.get("postprocess", {}))
+    for key in ("output_dir", "dipoles"):
+        if postprocess_data.get(key) is not None:
+            postprocess_data[key] = Path(postprocess_data[key])
+    postprocess_data.setdefault("output_dir", None)
+    postprocess_data.setdefault("dipoles", None)
+    postprocess_data.setdefault("delta_scf", 0.0)
+    safety_data = dict(data.get("safety", {}))
+    safety_data.setdefault("max_memory_gb", 24.0)
+    safety_data.setdefault("min_available_memory_gb", 4.0)
+    safety_data.setdefault("memory_safety_factor", 2.5)
 
     config = AppConfig(
         paths=PathsConfig(**paths_data),
         problem=ProblemConfig(**problem_data),
         execution=ExecutionConfig(**execution_data),
         dielectric=DielectricConfig(**data["dielectric"]),
+        postprocess=PostprocessConfig(**postprocess_data),
+        safety=SafetyConfig(**safety_data),
     )
     validate_runtime_dimensions(config.problem)
     return config

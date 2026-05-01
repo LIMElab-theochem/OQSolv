@@ -87,7 +87,7 @@ Mathematica's `eigen[[2]]`.
 
 ### `dipoles.nb`
 
-This notebook is part of the Onsager and spectroscopy preprocessing path.
+This notebook is part of the general dipole-observable preprocessing path.
 
 - It starts from a limited dipole dataset, historically obtained from a
   GAMESS-US workflow in which only ground-state to excited-state transition
@@ -98,9 +98,12 @@ This notebook is part of the Onsager and spectroscopy preprocessing path.
 - It reconstructs a fuller state/transition dipole tensor and exports the
   completed `ci_mut.inp`-style dataset.
 
-Scientifically, this notebook is relevant both to the Onsager branch and to
-postprocessing routines such as oscillator strengths, because those quantities
-depend on transition dipole moments in the appropriate basis.
+Scientifically, this notebook is relevant to the Onsager coupling model and to
+OQS-PCM/OQS-Onsager postprocessing routines such as oscillator strengths,
+because those quantities depend on state/transition electric dipole moments in
+the appropriate basis.  The limited `ci_mut.awk` extraction from a GAMESS-US log
+is not the source of the completed tensor; it is a diagnostic reference for the
+ground-state to excited-state transition dipoles.
 
 ## Naming Convention
 
@@ -220,6 +223,49 @@ Render integrated figures from figure-ready text tables:
 oqs-pcm figures all /path/to/figure_tables /path/to/output_figures
 ```
 
+Generate the figure-ready tables from raw OQSolv solver outputs:
+
+```bash
+oqs-pcm postprocess example_config.toml
+```
+
+This command is the refactored replacement for the relevant export cells in
+`figures-new.nb`. It intentionally stops at plain-text tables so that numerical
+postprocessing and matplotlib rendering remain separately testable.
+
+Estimate the heavy dense-array memory footprint before running a large PCM
+potential transformation:
+
+```bash
+oqs-pcm estimate-memory example_config.toml
+```
+
+The estimator reads `nts` from `ci_pot.inp` and combines it with `problem.nsts`
+to estimate the dense `nsts x nsts x nts` potential tensors plus the cavity
+matrix. The estimate is multiplied by `[safety].memory_safety_factor` to account
+for NumPy/BLAS temporaries.
+
+Postprocessing semantics:
+
+- `ww` is computed by `compute_pcm_reference_polarization_shift()` as the
+  corrected negative half-contraction `-.5 (Kerneld V).V` in the PCM
+  normal-mode basis. The original Mathematica source used the opposite sign in
+  the postprocessing notebook; OQSolv intentionally fixes that convention.
+- `ww` is not exposed in TOML or the CLI because it must remain internally
+  coherent with the PCM kernel and normal-mode potential of the run being
+  postprocessed.
+- `deltascf` is not inferred by OQSolv because it comes from external SCF
+  total-energy bookkeeping; it is supplied as `[postprocess].delta_scf`.
+- The notebook convention for `deltascf` is
+  `<Psi|H(0) + V/2|Psi>_solvent - <Psi|H(0)|Psi>_gas`, in Hartree. This value
+  belongs to the upstream frozen-solvent/in-vacuo electronic-structure data,
+  not to the OQS diagonalization layer.
+- absolute level-energy exports receive `energy + ww + deltascf`.
+- spectra exports use transition energies `energy[k] - energy[0]`, so a
+  constant `ww` shift cancels from the x-axis, matching the Mathematica logic.
+- oscillator strengths are computed from state/transition dipoles transformed
+  into the inertial basis when `solve_inertial_basis = true`.
+
 ## Execution Semantics
 
 The execution controls are intentionally separated because they govern
@@ -247,6 +293,34 @@ running the downstream solvers in a basis other than the inertial one, for
 example the original frozen or gas-phase-like basis in weakly polar solvents.
 The same basis-choice rule should also apply to `fit_cutoff` when that variant
 is added to the Python implementation.
+
+## Memory Safety
+
+The highest-risk step is PCM potential processing:
+
+- loading the frozen state/transition electrostatic potential tensor
+- adding nuclear diagonal contributions
+- transforming the tensor to the PCM normal-mode basis
+- writing `ci_pot_normal_mode.inp`
+
+The code now guards this path in two ways:
+
+- `estimate_pcm_potential_mode_memory()` computes a conservative peak estimate
+  before allocating the large arrays.
+- `apply_process_memory_limit()` installs a process address-space limit from
+  `[safety].max_memory_gb` before `oqs-pcm run` starts.
+
+The default TOML safety values are conservative for a 32 GB workstation:
+
+```toml
+[safety]
+max_memory_gb = 24.0
+min_available_memory_gb = 4.0
+memory_safety_factor = 2.5
+```
+
+For cluster jobs, increase `max_memory_gb` only when the requested node memory
+comfortably exceeds the estimator output.
 
 ## Input File Formats
 
@@ -290,26 +364,23 @@ The transformed file written by the Python code keeps the Mathematica layout.
   - one header line containing `i j`
   - `nts` lines with one potential value per tessera
 
-### Onsager `ci_mut.inp`
+### Completed `ci_mut.inp`
 
-This file stores state-specific and transition electric dipole moments.
+This file stores general state-specific and transition electric dipole moments.
+It is consumed by the OQS-Onsager coupling backend and by oscillator-strength
+postprocessing for OQS-PCM and OQS-Onsager.
 
-- Whitespace-separated numeric table.
-- Column 2:
-  initial electronic-state index.
-- Column 4:
-  final electronic-state index.
-- Last three columns:
-  Cartesian dipole components `(x, y, z)`.
+- Canonical OQSolv rows use `States i and j mux muy muz`.
+- State labels are one-based total-state labels:
+  label 1 is the ground state, label 2 is the first excited state.
 - The current loader constructs a symmetric tensor
   `mu[state_i, state_j, cartesian_component]`.
-- The number of states may be inferred from the largest state index appearing
-  in the file, together with the indexing convention used by the exporter
-  (zero-based or one-based).
+- Internally, Python uses zero-based total-state indices:
+  internal index 0 is the ground state, internal index 1 is the first excited state.
 - Historically, the raw electronic-structure output may have contained only a
-  limited subset of these dipoles. In the original workflow, `dipoles.nb`
-  completed the missing state/transition dipole information before the data
-  were used by Onsager routines or oscillator-strength postprocessing.
+  limited GS-ES subset of these dipoles. In the original workflow,
+  `dipoles.nb` completed the missing state/transition dipole information before
+  the data were used by Onsager routines or oscillator-strength postprocessing.
 
 ### `Sm12T.dat`
 
@@ -392,6 +463,9 @@ Generated comparison outputs are written to
 - The original Mathematica scripts were highly procedural and repeated nearly identical eigensolver loops. The Python version centralizes that repeated logic in `run_statewise_solver()` and `iterate_state_energy()`.
 - Hard-coded filesystem paths were moved into `example_config.toml`.
 - The solver, postprocessing, and figure layers are now one package with one CLI.
+- The relevant table-generation parts of `figures-new.nb` are now represented
+  by `src/oqs_pcm/postprocess/tables.py`; the plotting layer consumes those
+  tables from `src/oqs_pcm/figures/`.
 - The comments are intentionally more explicit than usual Python production code because the immediate target reader is not necessarily a Python specialist.
 - The old `python_graphs` scripts were used as behavior references and are being replaced by library modules under `src/oqs_pcm/figures/`.
 - The Onsager notebook confirmed that repeated execution blocks differ mainly by parameter choices and data sources. That repetition should eventually collapse into parameterized Python workflows rather than notebook cell duplication.
@@ -407,7 +481,10 @@ Generated comparison outputs are written to
 - This first version assumes the original text input formats remain unchanged.
 - Numerical validation against the Mathematica outputs has not yet been done in this workspace because the required data files are not yet wired into a runnable local configuration.
 - The current code preserves the operational model variants from the Mathematica script, but it does not yet explain the scientific rationale for each approximation.
-- The notebook `figures-new.nb` is larger than the subset currently integrated. The refactor intentionally targets only the parts relevant to the tables consumed by the former `python_graphs` routines.
+- The notebook `figures-new.nb` is larger than the subset currently integrated.
+  The refactor now covers the relevant table-generation and figure-consumption
+  path used by the former `python_graphs` routines; unrelated exploratory
+  notebook cells remain intentionally excluded.
 - `oqs-onsager-hono-water-eps-el.nb` has been inspected for architecture and figure-workflow relevance. The solver engine shared with PCM is now explicit, and Onsager-specific coupling utilities have been added, but a full end-to-end Onsager command workflow still needs to be wired and validated.
 
 ## Recommended Next Step

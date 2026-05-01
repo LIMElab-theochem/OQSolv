@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use OQSolv, please cite this software archive and the associated scientific publication when available."
+title: "OQSolv: Open Quantum System continuum solvation utilities"
+type: software
+authors:
+  - family-names: "Gil Perez"
+    given-names: "Gabriel Jose"
+    email: "gabrieljose.gilperez@uniupo.it"
+repository-code: "https://github.com/gabriel-gil/OQSolv"
+abstract: >-
+  OQSolv is a Python implementation of Open Quantum System extensions of
+  continuum solvation models, including OQS-PCM and OQS-Onsager workflows,
+  preprocessing utilities, regression data, and developer/user documentation.
+keywords:
+  - open quantum systems
+  - polarizable continuum model
+  - OQS-PCM
+  - OQS-Onsager
+  - solvation
+  - computational chemistry
+version: "0.1.0"
+date-released: "2026-04-30"

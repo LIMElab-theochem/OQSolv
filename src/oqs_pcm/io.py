@@ -102,35 +102,62 @@ def io_write_pcm_normal_mode_potential_tensor(path: str | Path, potential: np.nd
                     handle.write(f"{potential[i_state, j_state, tessera]:.18e}\n")
 
 
-def io_load_onsager_transition_dipole_tensor(path: str | Path, nsts: int, state_offset: int = 1) -> np.ndarray:
+def io_load_state_transition_dipole_tensor(path: str | Path, nsts: int, state_offset: int = 1) -> np.ndarray:
     """Load state/transition electric dipole moments into a symmetric tensor.
 
-    The Onsager notebook builds a three-component tensor `mu[i, j, xyz]` from
-    text tables whose relevant columns are:
+    These dipoles are general molecular observables.  They are used by the
+    Onsager coupling model, but also by PCM/OQS-PCM postprocessing such as
+    oscillator strengths.  Two text layouts are accepted:
 
-    - column 2: initial state index
-    - column 4: final state index
-    - last three columns: x, y, z dipole components
+    - legacy completed `ci_mut` rows:
+      `States i and j mux muy muz`, with one-based state labels
+    - lightweight numeric rows whose relevant columns are:
+      column 2: initial state index; column 4: final state index; last three
+      columns: x, y, z dipole components
 
-    `state_offset` controls whether the input file uses zero-based or one-based
-    state numbering. The Mathematica notebooks effectively use one-based array
-    access after adding an offset where needed, so keeping the offset explicit
-    here avoids hiding an important indexing choice.
+    `state_offset` applies only to the numeric layout.  The legacy `States`
+    layout is already one-based and includes the ground state.
     """
 
-    table = io_load_numeric_table(path)
-    initial_states = table[:, 1].astype(int)
-    final_states = table[:, 3].astype(int)
-    dipoles = table[:, -3:].astype(float)
-
     tensor = np.zeros((nsts + 1, nsts + 1, 3), dtype=float)
-    for row_index in range(len(dipoles)):
-        i_state = int(initial_states[row_index]) + state_offset
-        j_state = int(final_states[row_index]) + state_offset
-        tensor[i_state, j_state, :] = dipoles[row_index, :]
-        tensor[j_state, i_state, :] = dipoles[row_index, :]
+    rows = [line.split() for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
+
+    for tokens in rows:
+        if tokens[0].lower() == "states":
+            i_state = int(tokens[1]) - 1
+            j_state = int(tokens[3]) - 1
+        else:
+            i_state = int(float(tokens[1])) + state_offset
+            j_state = int(float(tokens[3])) + state_offset
+
+        dipole = np.asarray([float(token.replace("D", "E").replace("d", "e")) for token in tokens[-3:]])
+        tensor[i_state, j_state, :] = dipole
+        tensor[j_state, i_state, :] = dipole
 
     return tensor
+
+
+def io_write_state_transition_dipole_tensor(path: str | Path, dipole_tensor: np.ndarray) -> None:
+    """Write a completed state/transition dipole tensor in legacy `ci_mut` form."""
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    nstates = dipole_tensor.shape[0]
+
+    with path.open("w", encoding="utf-8") as handle:
+        for i_state in range(nstates):
+            for j_state in range(i_state, nstates):
+                mux, muy, muz = dipole_tensor[i_state, j_state, :]
+                handle.write(
+                    f"States {i_state + 1} and {j_state + 1} "
+                    f"{mux:.18e} {muy:.18e} {muz:.18e}\n"
+                )
+
+
+def io_load_onsager_transition_dipole_tensor(path: str | Path, nsts: int, state_offset: int = 1) -> np.ndarray:
+    """Backward-compatible alias for the general state/transition dipole loader."""
+
+    return io_load_state_transition_dipole_tensor(path, nsts=nsts, state_offset=state_offset)
 
 
 # Backward-compatible aliases used while the naming refactor propagates.
@@ -142,4 +169,6 @@ write_vector = io_write_vector
 write_matrix = io_write_matrix
 write_named_results = io_write_named_results
 write_normal_mode_potential = io_write_pcm_normal_mode_potential_tensor
-load_transition_dipoles = io_load_onsager_transition_dipole_tensor
+load_state_transition_dipoles = io_load_state_transition_dipole_tensor
+write_state_transition_dipoles = io_write_state_transition_dipole_tensor
+load_transition_dipoles = io_load_state_transition_dipole_tensor

@@ -28,6 +28,27 @@ solve_inertial_basis = false
 reuse_inertial_cache = true
 write_text_exports = true
 
+[postprocess]
+output_dir = "./figure_tables"
+dipoles = "/path/to/ci_mut.inp"
+# External SCF shift in Hartree used for absolute solvation-energy tables.
+# Notebook convention:
+# delta_scf = <Psi|H(0) + V/2|Psi>_solvent - <Psi|H(0)|Psi>_gas
+# It is not inferred by OQSolv because it comes from the upstream electronic-
+# structure calculations, not from the OQS diagonalization itself.
+delta_scf = 0.0
+
+[safety]
+# Hard process address-space ceiling. This prevents accidental OS-wide memory
+# exhaustion during dense PCM potential transformations.
+max_memory_gb = 24.0
+# Abort before heavy allocation if the operating system reports less available
+# memory than this value.
+min_available_memory_gb = 4.0
+# Conservative multiplier applied to the dense-array memory estimate to account
+# for temporary NumPy/BLAS allocations.
+memory_safety_factor = 2.5
+
 [dielectric]
 debye_c = [0.47, 72.62]
 debye_g = [146198.83040935672, 12531.328320802005]

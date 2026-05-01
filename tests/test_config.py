@@ -39,6 +39,11 @@ solve_inertial_basis = false
 reuse_inertial_cache = false
 write_text_exports = true
 
+[postprocess]
+output_dir = "/tmp/figure_tables"
+dipoles = "/tmp/ci_mut.inp"
+delta_scf = -0.01
+
 [dielectric]
 debye_c = [0.47, 72.62]
 debye_g = [1.0, 2.0]
@@ -60,6 +65,9 @@ optical_drude_start_index = 1
     assert config.execution.reuse_inertial_cache is False
     assert config.paths.output_dir == Path("/tmp/output")
     assert config.dielectric.drude_w == [0.1, 0.2]
+    assert config.postprocess.output_dir == Path("/tmp/figure_tables")
+    assert config.postprocess.dipoles == Path("/tmp/ci_mut.inp")
+    assert config.postprocess.delta_scf == -0.01
 
 
 def test_load_config_defaults_to_reusing_inertial_cache(tmp_path: Path) -> None:
@@ -108,6 +116,9 @@ optical_drude_start_index = 1
     config = load_config(config_path)
 
     assert config.execution.reuse_inertial_cache is True
+    assert config.postprocess.output_dir is None
+    assert config.postprocess.dipoles is None
+    assert config.postprocess.delta_scf == 0.0
 
 
 def test_load_config_accepts_legacy_build_normal_modes_key(tmp_path: Path) -> None:

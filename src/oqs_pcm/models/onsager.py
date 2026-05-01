@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from oqs_pcm.dielectric import DielectricModel
-from oqs_pcm.io import io_load_onsager_transition_dipole_tensor
+from oqs_pcm.io import io_load_state_transition_dipole_tensor
 
 
 @dataclass(slots=True)
@@ -43,7 +43,7 @@ class OnsagerKernelBundle:
 def load_onsager_dipoles(path: str | Path, nsts: int, state_offset: int = 1) -> np.ndarray:
     """Load the state/transition dipole tensor used by the Onsager workflow."""
 
-    return io_load_onsager_transition_dipole_tensor(path, nsts, state_offset=state_offset)
+    return io_load_state_transition_dipole_tensor(path, nsts, state_offset=state_offset)
 
 
 def onsager_reaction_factor(epsilon_value: complex | float, cavity_radius: float) -> complex:

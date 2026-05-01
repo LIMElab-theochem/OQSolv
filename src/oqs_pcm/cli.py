@@ -4,6 +4,20 @@ import argparse
 from pathlib import Path
 
 from oqs_pcm.config import load_config
+from oqs_pcm.gamess import (
+    gamess_extract_ci_energies,
+    gamess_extract_potential_block,
+    gamess_extract_reference_ground_excited_dipoles,
+    gamess_write_ci_energy,
+    gamess_write_reference_ground_excited_dipoles,
+    gamess_write_text,
+)
+from oqs_pcm.postprocess.tables import write_notebook_equivalent_tables
+from oqs_pcm.memory import (
+    apply_process_memory_limit,
+    estimate_pcm_potential_mode_memory,
+    format_memory_estimate,
+)
 from oqs_pcm.workflow import build_cavity_mode_basis_files, build_normal_mode_file, solve_oqs_pcm
 
 
@@ -39,11 +53,65 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional subset of solver variants to run. By default all supported PCM variants are computed.",
     )
 
+    estimate_parser = subparsers.add_parser(
+        "estimate-memory",
+        help="Estimate memory requirements for heavy OQSolv preprocessing stages without running them.",
+    )
+    estimate_parser.add_argument("config", type=Path, help="Path to the TOML configuration file.")
+
     figures_parser = subparsers.add_parser("figures", help="Render figure files from postprocessed text tables.")
     figures_parser.add_argument("kind", choices=("levels", "spectra", "cutoff", "convergence", "all"))
     figures_parser.add_argument("data_dir", type=Path, help="Directory containing the text tables consumed by the figure routines.")
     figures_parser.add_argument("output_dir", type=Path, help="Directory where the generated figure files should be written.")
     figures_parser.add_argument("--fontsize", type=int, default=12, help="Base font size for the generated figures.")
+
+    postprocess_parser = subparsers.add_parser(
+        "postprocess",
+        help="Generate notebook-equivalent reduced text tables from OQSolv solver outputs.",
+    )
+    postprocess_parser.add_argument("config", type=Path, help="Path to the TOML configuration file used for the OQSolv run.")
+    postprocess_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Override [postprocess].output_dir from the TOML file.",
+    )
+    postprocess_parser.add_argument(
+        "--dipoles",
+        type=Path,
+        help="Override [postprocess].dipoles from the TOML file.",
+    )
+    postprocess_parser.add_argument(
+        "--delta-scf",
+        type=float,
+        help="Override [postprocess].delta_scf from the TOML file.",
+    )
+    postprocess_parser.add_argument(
+        "--skip-levels",
+        action="store_true",
+        help="Do not write absolute level-energy tables such as en.txt and enbo.txt.",
+    )
+    postprocess_parser.add_argument(
+        "--skip-spectra",
+        action="store_true",
+        help="Do not write spectra tables such as full.txt, bo.txt, cut.txt, and fit.txt.",
+    )
+    postprocess_parser.add_argument(
+        "--convergence-root",
+        nargs=2,
+        action="append",
+        metavar=("NSTS", "OUTPUT_ROOT"),
+        help="Optional convergence source: total-state count and OQSolv output root containing variant directories.",
+    )
+
+    prep_parser = subparsers.add_parser("prep-gamess", help="Extract OQSolv ingredient files from a GAMESS-US log.")
+    prep_parser.add_argument("log_file", type=Path, help="GAMESS-US log file.")
+    prep_parser.add_argument("--ci-energy", type=Path, help="Output path for ci_energy.inp.")
+    prep_parser.add_argument("--ci-pot", type=Path, help="Output path for ci_pot.inp.")
+    prep_parser.add_argument(
+        "--reference-ci-mut",
+        type=Path,
+        help="Output path for the diagnostic GS-ES dipole reference extracted from the log.",
+    )
 
     return parser
 
@@ -58,6 +126,7 @@ def main() -> None:
 
     if args.command in {None, "run"}:
         config = load_config(args.config)
+        apply_process_memory_limit(config.safety.max_memory_gb)
 
         if args.mode in {"cavity-basis", "all"}:
             lambda_values, sm12t = build_cavity_mode_basis_files(config)
@@ -74,6 +143,12 @@ def main() -> None:
             results = solve_oqs_pcm(config, requested_variants=set(args.variants) if args.variants else None)
             print(f"Wrote {len(results)} result sets to {config.paths.output_dir}")
             print(f"Available result labels: {', '.join(results)}")
+        return
+
+    if args.command == "estimate-memory":
+        config = load_config(args.config)
+        estimate = estimate_pcm_potential_mode_memory(config)
+        print(format_memory_estimate(estimate))
         return
 
     if args.command == "figures":
@@ -96,6 +171,48 @@ def main() -> None:
         if args.kind in {"convergence", "all"}:
             render_convergence_figures(args.data_dir, args.output_dir, fontsize=args.fontsize)
         print(f"Figures written to {args.output_dir}")
+        return
+
+    if args.command == "postprocess":
+        config = load_config(args.config)
+        output_dir = args.output_dir or config.postprocess.output_dir
+        dipoles = args.dipoles or config.postprocess.dipoles
+        delta_scf = args.delta_scf if args.delta_scf is not None else config.postprocess.delta_scf
+        if output_dir is None:
+            raise SystemExit("Missing postprocess output directory. Set [postprocess].output_dir or pass --output-dir.")
+        convergence_roots = None
+        if args.convergence_root:
+            convergence_roots = {int(nstates): Path(root) for nstates, root in args.convergence_root}
+        summary = write_notebook_equivalent_tables(
+            config,
+            output_dir=output_dir,
+            dipole_file=dipoles,
+            delta_scf=delta_scf,
+            include_levels=not args.skip_levels,
+            include_spectra=not args.skip_spectra,
+            include_convergence=bool(convergence_roots),
+            convergence_roots_by_nstates=convergence_roots,
+        )
+        print(f"Postprocessed tables written to {output_dir}")
+        print(f"Reference polarization shift ww: {summary.reference_shift:.16e} Hartree")
+        print(f"Level tables: {len(summary.level_files)}")
+        print(f"Spectra tables: {len(summary.spectra_files)}")
+        print(f"Convergence tables: {len(summary.convergence_files)}")
+        return
+
+    if args.command == "prep-gamess":
+        if args.ci_energy is not None:
+            roots = gamess_extract_ci_energies(args.log_file)
+            gamess_write_ci_energy(args.ci_energy, roots)
+            print(f"Wrote {len(roots)} excited-state energies to {args.ci_energy}")
+        if args.ci_pot is not None:
+            text = gamess_extract_potential_block(args.log_file)
+            gamess_write_text(args.ci_pot, text)
+            print(f"Wrote PCM potential block to {args.ci_pot}")
+        if args.reference_ci_mut is not None:
+            rows = gamess_extract_reference_ground_excited_dipoles(args.log_file)
+            gamess_write_reference_ground_excited_dipoles(args.reference_ci_mut, rows)
+            print(f"Wrote {len(rows)} diagnostic GS-ES dipoles to {args.reference_ci_mut}")
         return
 
 

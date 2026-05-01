@@ -18,6 +18,7 @@ from oqs_pcm.io import (
     io_write_vector,
 )
 from oqs_pcm.models.pcm import build_pcm_kernels
+from oqs_pcm.memory import enforce_memory_estimate, estimate_pcm_potential_mode_memory
 from oqs_pcm.potential import pcm_add_nuclear_potential_to_state_diagonals, pcm_load_frozen_state_transition_potential_tensor, pcm_load_normal_mode_potential_tensor, transform_coupling_tensor_to_normal_modes
 from oqs_pcm.solver import (
     SolverConfig,
@@ -34,6 +35,8 @@ from oqs_pcm.solver import (
 def build_normal_mode_file(config: AppConfig) -> np.ndarray:
     """Run the workflow originally implemented in `potential_normal_modes.m`."""
 
+    estimate = estimate_pcm_potential_mode_memory(config)
+    enforce_memory_estimate(estimate, minimum_available_gb=config.safety.min_available_memory_gb)
     nts, ve, nuclear = pcm_load_frozen_state_transition_potential_tensor(str(config.paths.ci_potential), config.problem.nsts - 1)
     ve = pcm_add_nuclear_potential_to_state_diagonals(ve, nuclear)
     sm12t = io_load_normal_mode_transformation_matrix(config.paths.sm12t)

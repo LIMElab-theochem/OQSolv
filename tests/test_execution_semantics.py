@@ -7,7 +7,9 @@ from oqs_pcm.config import (
     DielectricConfig,
     ExecutionConfig,
     PathsConfig,
+    PostprocessConfig,
     ProblemConfig,
+    SafetyConfig,
 )
 from oqs_pcm.workflow import get_inertial_cache_paths, should_recompute_inertial_basis
 
@@ -57,6 +59,16 @@ def _config(
             drude_c=[0.3, 0.4],
             drude_g=[0.5, 0.6],
             optical_drude_start_index=1,
+        ),
+        postprocess=PostprocessConfig(
+            output_dir=None,
+            dipoles=None,
+            delta_scf=0.0,
+        ),
+        safety=SafetyConfig(
+            max_memory_gb=24.0,
+            min_available_memory_gb=4.0,
+            memory_safety_factor=2.5,
         ),
     )
 

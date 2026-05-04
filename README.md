@@ -131,8 +131,8 @@ python -m pytest tests
 
 ## Authors And Contact
 
-- Gabriel Gil, Universita del Piemonte Orientale,
+- Gabriel Gil, Light interacting with Molecules in Embeddings (LIME) Lab, Dipartimento di Scienze e Innovazione Tecnologica, Università del Piemonte Orientale,
   [gabrieljose.gilperez@uniupo.it](mailto:gabrieljose.gilperez@uniupo.it)
-- Ciro A. Guido, Universita del Piemonte Orientale,
+- Ciro A. Guido, Light interacting with Molecules in Embeddings (LIME) Lab, Dipartimento di Scienze e Innovazione Tecnologica, Università del Piemonte Orientale,
   [ciro.guido@uniupo.it](mailto:ciro.guido@uniupo.it)
-- Stefano Corni, Universita degli Studi di Padova
+- Stefano Corni, Nanostructures and biomolecules modeling group, Dipartimento di Scienze Chimiche, Università degli Studi di Padova; S3, Istituto di Nanoscienze, Modena

@@ -1,11 +1,19 @@
 {
   "title": "OQSolv: Open Quantum System continuum solvation utilities",
   "upload_type": "software",
-  "description": "Python implementation of Open Quantum System extensions of continuum solvation models, including OQS-PCM and OQS-Onsager workflows, preprocessing utilities, regression data, and developer/user documentation.",
+  "description": "Python implementation of Open Quantum System extensions of continuum solvation models, including OQS-PCM and OQS-Onsager workflows, a user manual, and the minimal validated reference data required for reproduction.",
   "creators": [
     {
-      "name": "Gil Perez, Gabriel Jose",
-      "affiliation": "Universita del Piemonte Orientale"
+      "name": "Gil, Gabriel",
+      "affiliation": "Light interacting with Molecules in Embeddings (LIME) Lab, Dipartimento di Scienze e Innovazione Tecnologica, Università del Piemonte Orientale"
+    },
+    {
+      "name": "Guido, Ciro A.",
+      "affiliation": "Light interacting with Molecules in Embeddings (LIME) Lab, Dipartimento di Scienze e Innovazione Tecnologica, Università del Piemonte Orientale"
+    },
+    {
+      "name": "Corni, Stefano",
+      "affiliation": "Nanostructures and biomolecules modeling group, Dipartimento di Scienze Chimiche, Università degli Studi di Padova; S3, Istituto di Nanoscienze, Modena"
     }
   ],
   "access_right": "open",

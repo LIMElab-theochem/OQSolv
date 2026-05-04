@@ -6,6 +6,14 @@ authors:
   - family-names: "Gil Perez"
     given-names: "Gabriel Jose"
     email: "gabrieljose.gilperez@uniupo.it"
+    affiliation: "Light interacting with Molecules in Embeddings (LIME) Lab, Dipartimento di Scienze e Innovazione Tecnologica, Università del Piemonte Orientale"
+  - family-names: "Guido"
+    given-names: "Ciro A."
+    email: "ciro.guido@uniupo.it"
+    affiliation: "Light interacting with Molecules in Embeddings (LIME) Lab, Dipartimento di Scienze e Innovazione Tecnologica, Università del Piemonte Orientale"
+  - family-names: "Corni"
+    given-names: "Stefano"
+    affiliation: "Nanostructures and biomolecules modeling group, Dipartimento di Scienze Chimiche, Università degli Studi di Padova; S3, Istituto di Nanoscienze, Modena"
 repository-code: "https://github.com/gabriel-gil/OQSolv"
 abstract: >-
   OQSolv is a Python implementation of Open Quantum System extensions of

@@ -20,7 +20,9 @@ from oqs_pcm.gamess import (
 from oqs_pcm.postprocess.tables import write_notebook_equivalent_tables
 from oqs_pcm.memory import (
     apply_process_memory_limit,
+    estimate_pcm_normal_mode_text_disk,
     estimate_pcm_potential_mode_memory,
+    format_disk_estimate,
     format_memory_estimate,
 )
 from oqs_pcm.workflow import build_cavity_mode_basis_files, build_normal_mode_file, solve_oqs_pcm
@@ -54,13 +56,14 @@ def build_parser() -> argparse.ArgumentParser:
             "first_full_nodiss",
             "bo",
             "cutoff",
+            "fit_cutoff",
         ),
         help="Optional subset of solver variants to run. By default all supported PCM variants are computed.",
     )
 
     estimate_parser = subparsers.add_parser(
         "estimate-memory",
-        help="Estimate memory requirements for heavy OQSolv preprocessing stages without running them.",
+        help="Estimate memory and disk requirements for heavy OQSolv preprocessing stages without running them.",
     )
     estimate_parser.add_argument("config", type=Path, help="Path to the TOML configuration file.")
 
@@ -178,8 +181,11 @@ def main() -> None:
 
     if args.command == "estimate-memory":
         config = load_config(args.config)
-        estimate = estimate_pcm_potential_mode_memory(config)
-        print(format_memory_estimate(estimate))
+        memory_estimate = estimate_pcm_potential_mode_memory(config)
+        disk_estimate = estimate_pcm_normal_mode_text_disk(config)
+        print(format_memory_estimate(memory_estimate))
+        print()
+        print(format_disk_estimate(disk_estimate))
         return
 
     if args.command == "figures":

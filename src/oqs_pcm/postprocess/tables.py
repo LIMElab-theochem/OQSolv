@@ -20,7 +20,7 @@ from oqs_pcm.postprocess.observables import (
     oscillator_strengths,
     transform_state_transition_observable_to_basis,
 )
-from oqs_pcm.potential import pcm_load_normal_mode_potential_tensor
+from oqs_pcm.potential import pcm_load_ground_normal_mode_potential
 from oqs_pcm.workflow import get_inertial_cache_paths
 
 
@@ -68,10 +68,7 @@ def compute_pcm_reference_polarization_shift(config: AppConfig) -> float:
     PCM kernel and normal-mode potential used by the current calculation.
     """
 
-    _, potential = pcm_load_normal_mode_potential_tensor(
-        str(config.paths.normal_mode_potential),
-        config.problem.nsts,
-    )
+    _, ground_potential = pcm_load_ground_normal_mode_potential(str(config.paths.normal_mode_potential))
     dielectric = build_dielectric_model(config.dielectric)
     kernels = build_pcm_kernels(
         lambda_path=config.paths.lambda_file,
@@ -79,7 +76,6 @@ def compute_pcm_reference_polarization_shift(config: AppConfig) -> float:
         energies=np.zeros(config.problem.nsts, dtype=float),
         optical_window_ev=(config.problem.optical_window_min_ev, config.problem.optical_window_max_ev),
     )
-    ground_potential = potential[0, 0, :]
     return float(-0.5 * np.sum(kernels.optical_kernel * ground_potential * ground_potential))
 
 

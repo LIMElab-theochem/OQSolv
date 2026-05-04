@@ -40,6 +40,8 @@ def _config(
             convergence_tolerance=1e-6,
             mixing_window=10,
             cutoff=0.299561,
+            fit_cutoff=0.5172311136437814,
+            fit_epsilon=2.0302901591898928,
             optical_window_min_ev=1.63,
             optical_window_max_ev=3.26,
             hartree_to_ev=27.2114,
@@ -69,6 +71,8 @@ def _config(
             max_memory_gb=24.0,
             min_available_memory_gb=4.0,
             memory_safety_factor=2.5,
+            min_free_disk_gb=4.0,
+            disk_safety_factor=1.25,
         ),
     )
 

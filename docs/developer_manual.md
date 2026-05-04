@@ -2,205 +2,352 @@
 
 ## Purpose
 
-This project is the first Python refactor of two Mathematica workflows:
+This document describes the internal scientific layering of OQSolv. It is not a
+usage guide. The goal is to explain how the package is assembled, which module
+owns each physical transformation, and which invariants must hold for the code
+to remain scientifically consistent.
 
-- `potential_normal_modes.m`
-- `oqs-pcm.m`
-- relevant postprocessing and export routines from `figures-new.nb`
-- figure generation previously stored in `python_graphs/`
-- upstream preprocessing logic from `lambda_sm12t.nb`
-- upstream preprocessing logic from `dipoles.nb`
+The code is organized around the OQS-Continuum workflow:
 
-The current goal is operational parity at the workflow level, not yet a domain-level rewrite.
+- build the solvent coupling object from cavity or dipole data
+- transform the coupling into the basis used by the solver
+- solve state-specific nonlinear eigenproblems in the inertial reference basis
+- postprocess the resulting energies and observables
+- turn the reduced data into figures and regression tables
 
-## Model Structure
+The implementation should remain readable to scientists working in continuum
+solvation, quantum chemistry, and physical chemistry. Internal structure is a
+tool for preserving the physics, not an end in itself.
 
-The codebase should be read as one framework with two related solvation-model
-families.
+## Scientific Layering
 
-- PCM-based OQS:
-  this branch uses state/transition electrostatic potentials defined on a
-  discretized molecular cavity that follows the solute shape.
-- Onsager-based OQS:
-  this branch uses state/transition electric dipole moments in a spherical
-  cavity model.
+OQSolv has three scientific layers.
 
-This distinction matters for architecture:
+### 1. Model layer
 
-- the solver core should not force PCM-specific ingredients into Onsager code
-- postprocessing and figure generation can often be shared once the data have
-  been reduced to common table formats such as energies, oscillator strengths,
-  dielectric curves, and convergence tables
+This layer builds the coupling object that represents the solvent response.
+The model layer is where PCM and Onsager diverge.
 
-The correct abstraction boundary is the coupling construction:
+- PCM uses cavity-based electrostatic potentials and a cavity-mode basis.
+- Onsager uses state and transition electric dipoles and a spherical reaction
+  field.
 
-- shared:
-  iterative diagonalization, convergence control, state tracking, frozen to
-  inertial basis changes
-- model-specific:
-  how the non-diagonal Hamiltonian correction is assembled from either
-  electrostatic potentials or dipole moments
+The model layer belongs in `src/oqs_pcm/models/` and the cavity-specific
+preparation code in `src/oqs_pcm/cavity.py`, `src/oqs_pcm/potential.py`, and
+`src/oqs_pcm/dielectric.py`.
 
-## Project Layout
+### 2. Solver layer
 
-- `src/oqs_pcm/config.py`: reads the TOML configuration file.
-- `src/oqs_pcm/io.py`: low-level text input and output helpers.
-- `src/oqs_pcm/potential.py`: PCM-specific loaders and transformations for state/transition electrostatic-potential tensors.
-- `src/oqs_pcm/dielectric.py`: dielectric model and direct PCM-kernel construction from `Lambda.dat`.
-- `src/oqs_pcm/dipole_algebra.py`: low-level dipole algebra reconstructed from `dipoles.nb`.
-- `src/oqs_pcm/dipole_completion.py`: Xdip, the standalone utility layer for completing `ci_mut.inp` from LR-TDDFT dipole ingredients.
-- `src/oqs_pcm/solver.py`: OQS-PCM solver variants.
-- `src/oqs_pcm/models/`: model-specific coupling builders over the shared solver engine.
-  `pcm.py` and `onsager.py` are the intended symmetry point.
-- `src/oqs_pcm/postprocess/`: loaders and reusable figure-ready dataset structures.
-- `src/oqs_pcm/figures/`: reusable matplotlib figure builders that replace the ad hoc scripts in `python_graphs/`.
-- `src/oqs_pcm/workflow.py`: orchestrates the integrated workflow.
-- `src/oqs_pcm/cli.py`: command-line entry point.
-- `example_config.toml`: template configuration file.
+This layer is shared by the different solvation models once the coupling
+object has been built.
 
-## Upstream Preprocessing Stages
+- the solver operates in the frozen-solvent basis and then in the inertial
+  basis
+- each corrected solvated state is obtained from a state-specific nonlinear
+  diagonalization
+- the selected root is the one that best overlaps the corresponding inertial
+  reference state
 
-Two Mathematica notebooks in the workspace are not alternative solver branches.
-They are upstream data-preparation stages that feed the same OQS-Continuum
-workflow and therefore belong in the long-term Python integration plan.
+This logic is implemented in `src/oqs_pcm/solver.py` and orchestrated through
+`src/oqs_pcm/workflow.py`.
 
-### `lambda_sm12t.nb`
+### 3. Output layer
 
-This notebook is part of the PCM preprocessing path.
+This layer turns computed arrays into plain-text tables and figures.
 
-- It loads cavity-operator data from `mat_SD.inp`.
-- It infers `nts` from that file.
-- It reshapes the Calderon `S` and `D` matrices.
-- It combines them with cavity geometry and tessera data.
-- It computes the normal-mode transformation matrix `Sm12T`.
-- It computes the cavity eigenvalue vector written to `Lambda.dat`.
+- `src/oqs_pcm/postprocess/` prepares reduced datasets and scientific tables
+- `src/oqs_pcm/figures/` renders those tables into publication figures
+- `src/oqs_pcm/io.py` provides the low-level text readers and writers used by
+  the whole package
 
-Scientifically, this notebook prepares PCM cavity-mode ingredients used before
-the actual OQS state-specific diagonalizations begin.
+The solver and postprocessing layers are separated on purpose so that the
+physics can be validated independently from the final plotting step.
 
-The Python implementation applies one deterministic eigenvector sign convention
-after diagonalizing the symmetric cavity-mode matrix.  Each full eigenvector is
-multiplied by one overall sign so that its largest-magnitude component is
-positive.  This is only a reproducibility convention: it must be applied to the
-entire eigenvector, never component-by-component across different eigenvectors.
-NumPy stores eigenvectors as columns, so the sign convention is applied to
-columns before transposing to the row-oriented matrix corresponding to
-Mathematica's `eigen[[2]]`.
+## Dependency Map
 
-### `dipoles.nb`
+The package is intentionally layered so that each scientific stage depends only
+on the previous one.
 
-This notebook is now represented by Xdip, the standalone dipole-completion
-utility. It is part of the general dipole-observable preprocessing path.
+### Configuration and guards
 
-- It starts from a limited dipole dataset, historically obtained from a
-  GAMESS-US workflow in which only ground-state to excited-state transition
-  dipoles were directly available.
-- It loads additional one-electron dipole integrals and orbital information.
-- It combines them with TDDFT amplitudes and Slater-Condon-style contractions.
-- It adds the nuclear dipole contribution.
-- It reconstructs a fuller state/transition dipole tensor and exports the
-  completed `ci_mut.inp`-style dataset.
+`config.py`, `memory.py`, and `gamess.py` sit at the boundary with the outside
+world.
 
-Scientifically, this notebook is relevant to the Onsager coupling model and to
-OQS-PCM/OQS-Onsager postprocessing routines such as oscillator strengths,
-because those quantities depend on state/transition electric dipole moments in
-the appropriate basis.  The limited `ci_mut.awk` extraction from a GAMESS-US log
-is not the source of the completed tensor; it is a diagnostic reference for the
-ground-state to excited-state transition dipoles.
+- `config.py` turns TOML data into typed runtime objects and checks the state
+  counting rules.
+- `memory.py` estimates resource use and enforces safety fences.
+- `gamess.py` converts GAMESS-US log output into the scientific input files used
+  by the rest of the package.
 
-Layering:
+These modules should remain simple and explicit. They are the first line of
+defense against inconsistent input data.
 
-- `dipole_algebra.py` contains the reusable scientific primitives.
-- `dipole_completion.py` contains Xdip's operational workflow, file writing,
-  and optional GS-ES diagnostics.
-- GAMESS-specific parsing remains separate so file-format concerns do not
-  obscure the validated dipole algebra.
+### Scientific model construction
 
-## Naming Convention
+`cavity.py`, `potential.py`, `dielectric.py`, and `models/` build the physical
+coupling object.
 
-The code now follows a naming convention meant to stay readable for developers
-coming from scientific computing rather than from Python alone.
+- `cavity.py` and `potential.py` handle the PCM cavity-mode representation and
+  the normal-mode transformation.
+- `dielectric.py` maps a frequency-dependent dielectric model to kernel
+  factors.
+- `models/pcm.py` combines cavity information, dielectric factors, and the
+  normal-mode representation into the PCM coupling.
+- `models/onsager.py` builds the dipole-based coupling used by the Onsager
+  backend.
 
-- Scientific routines use human-readable names tied to the manuscript
-  vocabulary, for example:
-  `solve_state_specific_energy_iteratively`,
-  `transform_coupling_tensor_to_inertial_basis`,
-  `pcm_load_frozen_state_transition_potential_tensor`.
-- Input/output helpers use an explicit `io_` prefix, for example:
-  `io_load_excited_state_energy_vector`,
-  `io_write_pcm_normal_mode_potential_tensor`,
-  `io_load_onsager_transition_dipole_tensor`.
-- Model-specific code uses explicit prefixes or module placement:
-  `pcm_*` for PCM-specific routines,
-  `Onsager*`/`onsager_*` for Onsager-specific routines.
-- Backward-compatible aliases are temporarily kept in a few modules while the
-  refactor propagates. New code should prefer the explicit names.
+This layer is where model-specific mathematics belongs. The solver should not
+need to know how the coupling object was assembled.
 
-## State-Count Semantics
+### Solver and workflow
 
-To avoid the ambiguity that existed in the Mathematica notebooks, the Python
-refactor uses one meaning for each state-count variable.
+`solver.py` and `workflow.py` are the core of the package.
 
-- `problem.nsts`: total number of electronic states in the full space,
-  including the ground state.
-- `n_excited_states_full`: derived quantity equal to `problem.nsts - 1`.
-- `problem.diagonalization_states`: Hamiltonian dimension used in the
-  state-specific nonlinear diagonalizations. This is a running parameter.
-- `problem.resolution_of_identity_states`: number of states retained in the RI
-  / sum-over-states space. This is a running parameter.
-- `problem.corrected_states`: number of target solvated states actually
-  corrected and returned. This is a running parameter.
+- `solver.py` contains the state-specific nonlinear diagonalization routines
+  and the approximation branches built on top of them.
+- `workflow.py` decides which caches can be reused, when the inertial basis
+  must be rebuilt, and how the model layer is handed to the solver layer.
 
-Mandatory relations enforced by the code:
+This split is deliberate. The solver focuses on the mathematical problem; the
+workflow decides when each stage must be executed and which cached objects are
+still valid.
 
-- `1 <= diagonalization_states <= nsts`
-- `1 <= resolution_of_identity_states <= nsts`
-- `resolution_of_identity_states >= diagonalization_states`
-- `1 <= corrected_states <= diagonalization_states`
+### Postprocessing and figures
 
-Interpretation:
+`postprocess/` and `figures/` consume solver output and never reach back into
+the solver.
 
-- the RI space cannot be smaller than the Hamiltonian dimension because the
-  effective OQS Hamiltonian uses the RI states as intermediate states
-- the number of corrected solvated states cannot exceed the Hamiltonian
-  dimension because one cannot correct more target states than those explicitly
-  represented in the diagonalization
+- `postprocess/observables.py` transforms state/transition observables between
+  bases and derives oscillator strengths.
+- `postprocess/tables.py` applies the scalar shifts needed for the final
+  reduced tables.
+- `postprocess/datasets.py` packages those tables into figure-ready datasets.
+- `figures/*.py` renders the final visual summaries.
 
-## Scientific Semantics
+The key rule is that figures must stay downstream of the scientific
+calculation. They should not contain hidden physics.
 
-The manuscript and SI define the scientific vocabulary that should be mirrored
-in the code, comments, and manuals.
+### Shared IO
 
-- `frozen-solvent basis`:
-  eigenstates of the frozen-solvent Hamiltonian used as the initial electronic
-  basis obtained from external electronic-structure calculations.
-- `inertial-solvent basis`:
-  eigenstates of the Hamiltonian that includes the inertial part of solvent
-  polarization. OQS corrections are expressed in this basis.
-- `dynamic solvent response`:
-  fast solvent electronic response described through the filtered,
-  frequency-dependent dielectric function.
-- `state-specific Hamiltonian`:
-  the effective OQS Hamiltonian depends on the target solvated state through
-  the state energy being corrected, so each state requires its own nonlinear
-  diagonalization.
-- `OQS-Continuum`:
-  umbrella term for the common algorithmic structure shared by OQS-PCM and
-  OQS-Onsager.
+`io.py` is intentionally low level and widely reusable.
 
-Current status of the layering:
+- it reads and writes the plain-text scientific files used throughout the
+  package
+- it should not encode model assumptions beyond the file formats themselves
 
-- shared iterative solver engine: implemented
-- PCM coupling backend: implemented in the existing workflow
-- Onsager coupling backend: partially integrated through loader and kernel utilities
-- Onsager-relevant figure pathway: integrated at the dataset/figure level
-- upstream preprocessing semantics for PCM cavity modes and Onsager dipoles:
-  documented and mapped, but not yet fully ported as runnable Python commands
+## Module Responsibilities
+
+The most important modules are:
+
+- `config.py`: typed configuration and runtime consistency checks.
+- `workflow.py`: execution order, cache reuse, and stage selection.
+- `solver.py`: nonlinear OQS solvers and shared approximation logic.
+- `dielectric.py`: dielectric models and kernel factors.
+- `cavity.py`: PCM cavity-mode basis construction.
+- `potential.py`: PCM potential loading and basis transformation.
+- `dipole_algebra.py`: dipole algebra for LR-TDDFT observables.
+- `dipole_completion.py`: completion of partial dipole tensors.
+- `models/pcm.py`: PCM coupling construction.
+- `models/onsager.py`: Onsager coupling construction.
+- `postprocess/tables.py`: reduced tables and scalar shifts.
+- `postprocess/observables.py`: observable basis transformations and
+  oscillator strengths.
+- `postprocess/datasets.py`: figure-ready dataset containers.
+- `figures/*.py`: publication figures and diagnostics.
+- `memory.py`: memory and disk estimates plus safety fences.
+- `gamess.py`: extraction helpers for GAMESS-US outputs.
+- `io.py`: shared plain-text IO.
+
+## Physical Data Flow
+
+The code follows a fixed scientific path.
+
+1. External electronic-structure data provide the frozen-solvent states and the
+   state/transition observable tensors.
+2. PCM runs additionally provide cavity electrostatic potentials and the cavity
+   transformation data needed to build normal-mode potentials.
+3. The model layer builds the coupling object, either PCM-based or Onsager-
+   based.
+4. The workflow layer transforms the coupling into the inertial reference
+   basis and stores the cached inertial representation when appropriate.
+5. The solver layer iterates the state-specific nonlinear eigenproblem for each
+   requested approximation branch.
+6. The postprocessing layer combines the solved energies with the scalar
+   reference shifts and observable transformations needed for spectra and
+   convergence tables.
+7. The figure layer consumes only the reduced tables.
+
+This separation keeps the expensive dense-array work in the solver stage and
+keeps the plotting layer independent of the scientific kernel construction.
+
+### Core call chain
+
+The practical call chain is:
+
+`cli.py` -> `workflow.py` -> `models/` + `cavity.py` + `potential.py` +
+`dielectric.py` -> `solver.py` -> `postprocess/` -> `figures/`
+
+The chain should not be short-circuited unless a new command is intentionally
+introduced for a distinct scientific stage.
+
+## PCM and Onsager Division of Labor
+
+PCM and Onsager share the same OQS-Continuum solver logic but differ in how the
+coupling object is built.
+
+- PCM couples through electrostatic potentials on the discretized cavity.
+- Onsager couples through dipole moments in a spherical-cavity reaction-field
+  picture.
+
+After the coupling has been built, both models use the same solver concepts:
+
+- inertial basis construction
+- root tracking by overlap
+- state-specific diagonalization
+- approximation branches such as Born-Oppenheimer, self-consistent limit, and
+  cutoff variants
+
+The developer rule is simple: keep the coupling builders model-specific, and
+keep the solver and postprocessing logic as shared as possible.
+
+## Solver Branches
+
+The following branches are intentionally implemented as variations of the same
+scientific core:
+
+- `ss_pol`: static self-polarization branch
+- `full`: full frequency-dependent OQS-PCM
+- `full_nodiss`: full model without dissipation
+- `full_nodisp_nodiss`: full model without dispersion or dissipation
+- `first_full`: first-iteration variant of the full model
+- `first_full_nodiss`: first-iteration variant without dissipation
+- `first_full_nodisp_nodiss`: first-iteration variant without dispersion or
+  dissipation
+- `bo`: Born-Oppenheimer solvation approximation
+- `cutoff`: cutoff approximation
+- `fit_cutoff`: cutoff-like approximation with fitted parameters
+
+These branches should reuse the same infrastructure whenever the mathematical
+form is the same. New branch-specific code is justified only when the coupling
+construction or the iteration rule genuinely differs.
+
+## State Semantics
+
+The package distinguishes three related counts:
+
+- `problem.nsts`: total number of electronic states, including the ground
+  state
+- `n_excited_states_full`: derived quantity equal to `problem.nsts - 1`
+- `problem.diagonalization_states`, `problem.resolution_of_identity_states`,
+  and `problem.corrected_states`: running parameters for a particular solve
+
+The running parameters have different roles:
+
+- the diagonalization dimension is the size of the explicit Hamiltonian
+- the RI dimension is the size of the intermediate-state space used in the
+  OQS correction
+- the corrected-state count is the number of target solvated states returned by
+  the solver
+
+The code enforces the following relations:
+
+- `1 <= problem.diagonalization_states <= problem.nsts`
+- `1 <= problem.resolution_of_identity_states <= problem.nsts`
+- `problem.resolution_of_identity_states >= problem.diagonalization_states`
+- `1 <= problem.corrected_states <= problem.diagonalization_states`
+
+These checks are not bookkeeping noise. They protect the interpretation of the
+OQS Hamiltonian and prevent inconsistent RI/Hamiltonian dimensions from being
+silently accepted.
+
+## Naming and Scientific Vocabulary
+
+The package uses names that reflect the physical role of each object.
+
+- input/output helpers use the `io_` prefix
+- cavity and potential routines keep the PCM terminology visible
+- dipole utilities use the `dipole_` prefix for algebra and completion
+- model-specific code lives under `models/`
+
+The preferred scientific vocabulary is:
+
+- `frozen-solvent basis`: starting electronic basis from the external
+  electronic-structure calculation
+- `inertial-solvent basis`: basis after the inertial part of the solvent
+  response has been incorporated
+- `dynamic solvent response`: fast frequency-dependent solvent contribution
+- `state-specific Hamiltonian`: the effective Hamiltonian for one target
+  solvated state
+- `free energy in solution`: scalar level output written by the energy tables
+- `oscillator strength`: the transition-intensity output written by the
+  spectra tables
+
+This terminology should appear in comments and docstrings unless a lower-level
+implementation detail forces a more technical phrasing.
+
+## Postprocessing Semantics
+
+The postprocessing layer transforms solver outputs into reduced tables.
+
+- `ww` is computed internally from the PCM normal-mode data. It is not a user
+  parameter because it must remain coherent with the current kernel and basis.
+- `delta_scf` is external bookkeeping from the electronic-structure side and is
+  supplied by configuration.
+- level-energy tables receive the absolute solution energy plus the scalar
+  shifts relevant to that run.
+- spectra tables use transition energies and oscillator strengths, so any
+  constant scalar shift cancels from the horizontal axis.
+- ground-state solvation free energy tables are convergence tables for the
+  scalar ground-state correction.
+
+The practical separation is important: solver outputs remain raw scientific
+results, while the postprocessing layer applies the presentation-level scalar
+shifts needed for the final tables.
+
+## Resource Safety
+
+Large PCM jobs can allocate dense arrays with shape roughly
+`nsts x nsts x nts` and can also write large normal-mode potential files. The
+`memory.py` module handles:
+
+- memory estimates before the heavy potential transformation
+- disk estimates before large text output
+- process memory limits where the platform supports them
+
+The workflow layer uses these checks so that failures happen before the
+machine or container becomes unstable.
+
+## Extending the Code
+
+When adding a new scientific feature, start by asking which layer it belongs to.
+
+- If it changes the coupling object, it belongs in the model layer.
+- If it changes root tracking or the nonlinear solve, it belongs in the solver
+  layer.
+- If it changes the final tables or plots, it belongs in the output layer.
+
+Prefer reusing shared solver and postprocessing code over creating new branches
+unless the mathematics truly differs. That keeps the PCM and Onsager
+implementations aligned and reduces the risk of divergence between equivalent
+operations.
+
+When a change affects both PCM and Onsager, prefer factoring the common logic
+upward and keeping only the coupling-builder differences in the model layer.
+When a change affects only figures or tables, keep it out of the solver unless
+it genuinely changes the scientific result.
+
+## Testing
+
+The repository includes unit tests and regression checks. Developer work should
+be validated with the test suite before merge. The project also keeps
+regression data for the validated scientific cases so that changes in the
+solver, postprocessing, or figure generation can be checked against known
+outputs.
 
 ## Environment Setup
 
-1. Create a virtual environment.
-2. Install the package in editable mode.
+The developer environment is the same editable Python environment used for the
+project itself.
 
 ```bash
 python3 -m venv .venv
@@ -208,301 +355,58 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-## Running the Tool
+## Execution Sketch
 
-Normal-mode transformation only:
+The stage ordering is the main operational idea to keep in mind when changing
+the code:
 
-```bash
-oqs-pcm example_config.toml --mode normal-modes
-```
+1. configuration and safety checks
+2. coupling construction
+3. optional PCM normal-mode reconstruction
+4. inertial-basis solve
+5. branch-specific state-specific solves
+6. postprocessing of energies and observables
+7. figure-table generation and plotting
 
-OQS-PCM solver only:
+The only stage that should control the rest of the workflow is the model and
+cache state. A change in the coupling object must invalidate any cached inertial
+representation derived from it.
 
-```bash
-oqs-pcm example_config.toml --mode solve
-```
+## Validation and Regression
 
-Complete workflow:
+The project keeps two validation tiers.
 
-```bash
-oqs-pcm run example_config.toml --mode all
-```
+- Smoke tests check package wiring, parsing, and basic numerical helpers.
+- Regression fixtures check that the scientific pipeline still reproduces the
+  validated reference datasets for representative solvation cases.
 
-Render integrated figures from figure-ready text tables:
+When extending the code, prefer keeping the regression fixtures narrow but
+scientifically meaningful. They should exercise the coupling layer, the solver
+layer, and the postprocessing layer without requiring every run to be
+recomputed during ordinary development.
 
-```bash
-oqs-pcm figures all /path/to/figure_tables /path/to/output_figures
-```
+## Maintenance Notes
 
-Generate the figure-ready tables from raw OQSolv solver outputs:
+The most important maintenance rule is to preserve the separation between
+scientific layers.
 
-```bash
-oqs-pcm postprocess example_config.toml
-```
+- Do not push model-specific assumptions into the solver unless the
+  mathematics demands it.
+- Do not let plotting code become a hidden continuation of the solver.
+- Do not encode file-format details in multiple places unless the format really
+  differs by layer.
 
-This command is the refactored replacement for the relevant export cells in
-`figures-new.nb`. It intentionally stops at plain-text tables so that numerical
-postprocessing and matplotlib rendering remain separately testable.
+When a change affects both PCM and Onsager, consolidate the shared behavior at
+the solver or postprocessing layer and keep only the coupling construction
+separate.
 
-Estimate the heavy dense-array memory footprint before running a large PCM
-potential transformation:
+## Environment Setup
 
-```bash
-oqs-pcm estimate-memory example_config.toml
-```
-
-The estimator reads `nts` from `ci_pot.inp` and combines it with `problem.nsts`
-to estimate the dense `nsts x nsts x nts` potential tensors plus the cavity
-matrix. The estimate is multiplied by `[safety].memory_safety_factor` to account
-for NumPy/BLAS temporaries.
-
-Postprocessing semantics:
-
-- `ww` is computed by `compute_pcm_reference_polarization_shift()` as the
-  corrected negative half-contraction `-.5 (Kerneld V).V` in the PCM
-  normal-mode basis. The original Mathematica source used the opposite sign in
-  the postprocessing notebook; OQSolv intentionally fixes that convention.
-- `ww` is not exposed in TOML or the CLI because it must remain internally
-  coherent with the PCM kernel and normal-mode potential of the run being
-  postprocessed.
-- `deltascf` is not inferred by OQSolv because it comes from external SCF
-  total-energy bookkeeping; it is supplied as `[postprocess].delta_scf`.
-- The notebook convention for `deltascf` is
-  `<Psi|H(0) + V/2|Psi>_solvent - <Psi|H(0)|Psi>_gas`, in Hartree. This value
-  belongs to the upstream frozen-solvent/in-vacuo electronic-structure data,
-  not to the OQS diagonalization layer.
-- absolute level-energy exports receive `energy + ww + deltascf`.
-- spectra exports use transition energies `energy[k] - energy[0]`, so a
-  constant `ww` shift cancels from the x-axis, matching the Mathematica logic.
-- oscillator strengths are computed from state/transition dipoles transformed
-  into the inertial basis when `solve_inertial_basis = true`.
-
-## Execution Semantics
-
-The execution controls are intentionally separated because they govern
-different intermediate stages of the OQS-Continuum workflow.
-
-- `build_potential_modes`:
-  rebuild the PCM normal-mode potential tensor from `ci_pot.inp` and
-  `Sm12T.dat`.
-- `solve_inertial_basis`:
-  use the inertial reference problem before running downstream variants such as
-  `ss_pol`, `full`, `bo`, and `cutoff`.
-- `reuse_inertial_cache`:
-  when `solve_inertial_basis = true`, reuse cached inertial energies and
-  inertial-basis states if they already exist.
-
-Important interaction rule:
-
-- normal-mode reuse and inertial-cache reuse are independent in general
-- however, if `build_potential_modes = true` and `solve_inertial_basis = true`,
-  the inertial reference problem must be recomputed because the transformed
-  coupling tensor has changed
-
-This separation also keeps open the scientifically relevant possibility of
-running the downstream solvers in a basis other than the inertial one, for
-example the original frozen or gas-phase-like basis in weakly polar solvents.
-The same basis-choice rule should also apply to `fit_cutoff` when that variant
-is added to the Python implementation.
-
-## Memory Safety
-
-The highest-risk step is PCM potential processing:
-
-- loading the frozen state/transition electrostatic potential tensor
-- adding nuclear diagonal contributions
-- transforming the tensor to the PCM normal-mode basis
-- writing `ci_pot_normal_mode.inp`
-
-The code now guards this path in two ways:
-
-- `estimate_pcm_potential_mode_memory()` computes a conservative peak estimate
-  before allocating the large arrays.
-- `apply_process_memory_limit()` installs a process address-space limit from
-  `[safety].max_memory_gb` before `oqs-pcm run` starts.
-
-The default TOML safety values are conservative for a 32 GB workstation:
-
-```toml
-[safety]
-max_memory_gb = 24.0
-min_available_memory_gb = 4.0
-memory_safety_factor = 2.5
-```
-
-For cluster jobs, increase `max_memory_gb` only when the requested node memory
-comfortably exceeds the estimator output.
-
-## Input File Formats
-
-The current implementation relies on plain-text tables exported by the
-electronic-structure workflow. Their layout should be treated as part of the
-public interface of the first refactor.
-
-### `ci_energy.inp`
-
-- Whitespace-separated numeric table.
-- The last column contains excitation energies in eV.
-- The Python loader converts that last column to Hartree and prepends a
-  ground-state reference energy equal to zero.
-- The number of electronic states can therefore be inferred as:
-  `nsts = number_of_rows_in_ci_energy_file + 1`.
-
-### PCM `ci_pot.inp`
-
-This file stores state-specific and transition electrostatic potentials on the
-PCM cavity tesserae.
-
-- First row:
-  first column is the number of cavity tesserae, `nts`.
-- The next relevant block contains the ground-state electrostatic potential and
-  the nuclear contribution sampled on those tesserae.
-- The remaining rows are grouped in blocks of length `nts + 1`.
-- For each block:
-  - the first row stores the pair of electronic-state indices `(i, j)`
-  - the next `nts` rows store the tessera-resolved electrostatic potential for
-    that state pair
-- In the current loader, the number of electronic states may be inferred from
-  the largest state index appearing in these pair headers.
-
-### PCM normal-mode potential file
-
-The transformed file written by the Python code keeps the Mathematica layout.
-
-- First line:
-  number of tesserae, `nts`.
-- Then, for each upper-triangular state pair `(i, j)`:
-  - one header line containing `i j`
-  - `nts` lines with one potential value per tessera
-
-### Completed `ci_mut.inp`
-
-This file stores general state-specific and transition electric dipole moments.
-It is consumed by the OQS-Onsager coupling backend and by oscillator-strength
-postprocessing for OQS-PCM and OQS-Onsager.
-
-- Canonical OQSolv rows use `States i and j mux muy muz`.
-- State labels are one-based total-state labels:
-  label 1 is the ground state, label 2 is the first excited state.
-- The current loader constructs a symmetric tensor
-  `mu[state_i, state_j, cartesian_component]`.
-- Internally, Python uses zero-based total-state indices:
-  internal index 0 is the ground state, internal index 1 is the first excited state.
-- Historically, the raw electronic-structure output may have contained only a
-  limited GS-ES subset of these dipoles. In the original workflow,
-  `dipoles.nb` completed the missing state/transition dipole information before
-  the data were used by Onsager routines or oscillator-strength postprocessing.
-
-### `Sm12T.dat`
-
-- Numeric matrix used to transform PCM electrostatic-potential tensors from the
-  original cavity representation to the normal-mode representation.
-- In the original workflow, this file was produced upstream by
-  `lambda_sm12t.nb` from cavity geometry and Calderon matrices.
-
-### `Lambda.dat`
-
-- Numeric table.
-- The first column contains the PCM cavity eigenvalues used to assemble the PCM
-  response kernel.
-- In the original workflow, this file was produced upstream by
-  `lambda_sm12t.nb`.
-
-## Configuration Notes
-
-- `problem.nsts` is still present in the configuration for explicitness and for
-  compatibility with the current code paths.
-- Scientifically, it should match the state count implied by `ci_energy.inp`
-  and by the largest state index present in the coupling file
-  (`ci_pot.inp` for PCM, `ci_mut*.inp` for Onsager).
-- A future cleanup can infer `nsts` automatically and treat the configuration
-  value as optional or as a consistency check only.
-
-## Running Tests
-
-The project currently includes a minimal smoke test suite. These tests are meant
-to check package wiring and basic file and parser behavior before any scientific
-validation is attempted.
-
-Run the suite with:
+The developer environment is the same editable Python environment used for the
+project itself.
 
 ```bash
-python -m pytest tests
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
 ```
-
-Current smoke-test coverage:
-
-- TOML configuration loading
-- CLI argument parsing
-- creation of plain-text output files
-- basic dielectric-model evaluation
-- figure-dataset loading
-
-## Regression Testsuite
-
-The directory `testsuite/hcl_water_pcm/` contains a validated HCl-in-water
-OQS-PCM reference fixture. It is intentionally larger and slower than the smoke
-tests because it protects the scientific workflow against numerical
-regressions.
-
-Run it from the workspace root with:
-
-```bash
-PYTHONPATH=/workspace/src /workspace/.venv/bin/python testsuite/hcl_water_pcm/validate.py
-```
-
-The validator regenerates:
-
-- PCM normal-mode potential
-- inertial-basis energies and states
-- `bo`
-- `ss_pol`
-- `cutoff`
-- `first_full_nodisp_nodiss`
-- `first_full_nodiss`
-- `first_full`
-- `full_nodisp_nodiss`
-- `full_nodiss`
-- `full`
-
-It compares the regenerated files against `testsuite/hcl_water_pcm/reference/`.
-Generated comparison outputs are written to
-`testsuite/hcl_water_pcm/current_output/`, which is ignored by Git.
-
-## Refactoring Decisions
-
-- The original Mathematica scripts were highly procedural and repeated nearly identical eigensolver loops. The Python version centralizes that repeated logic in `run_statewise_solver()` and `iterate_state_energy()`.
-- Hard-coded filesystem paths were moved into `example_config.toml`.
-- The solver, postprocessing, and figure layers are now one package with one CLI.
-- The relevant table-generation parts of `figures-new.nb` are now represented
-  by `src/oqs_pcm/postprocess/tables.py`; the plotting layer consumes those
-  tables from `src/oqs_pcm/figures/`.
-- The comments are intentionally more explicit than usual Python production code because the immediate target reader is not necessarily a Python specialist.
-- The old `python_graphs` scripts were used as behavior references and are being replaced by library modules under `src/oqs_pcm/figures/`.
-- The Onsager notebook confirmed that repeated execution blocks differ mainly by parameter choices and data sources. That repetition should eventually collapse into parameterized Python workflows rather than notebook cell duplication.
-- `lambda_sm12t.nb` and `dipoles.nb` clarified that part of the original
-  Mathematica project is best viewed as upstream scientific preprocessing.
-  Those stages should eventually become explicit Python preprocessing commands
-  rather than remain hidden manual prerequisites.
-- Terminology used consistently in the refactor:
-  PCM uses state/transition electrostatic potentials; Onsager uses state/transition dipole moments.
-
-## Known Gaps
-
-- This first version assumes the original text input formats remain unchanged.
-- Numerical validation against the Mathematica outputs has not yet been done in this workspace because the required data files are not yet wired into a runnable local configuration.
-- The current code preserves the operational model variants from the Mathematica script, but it does not yet explain the scientific rationale for each approximation.
-- The notebook `figures-new.nb` is larger than the subset currently integrated.
-  The refactor now covers the relevant table-generation and figure-consumption
-  path used by the former `python_graphs` routines; unrelated exploratory
-  notebook cells remain intentionally excluded.
-- `oqs-onsager-hono-water-eps-el.nb` has been inspected for architecture and figure-workflow relevance. The solver engine shared with PCM is now explicit, and Onsager-specific coupling utilities have been added, but a full end-to-end Onsager command workflow still needs to be wired and validated.
-
-## Recommended Next Step
-
-The next development step should be a validation pass against one trusted dataset:
-
-1. run the Mathematica version and keep reference outputs
-2. run the Python version with the same data
-3. compare energies and state vectors
-4. resolve indexing or parser mismatches before extending functionality

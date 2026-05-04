@@ -62,7 +62,14 @@ next public repository update or Zenodo archival release.
   max_memory_gb = 18.0
   min_available_memory_gb = 6.0
   memory_safety_factor = 4.0
+  min_free_disk_gb = 4.0
+  disk_safety_factor = 1.25
   ```
+
+- For long workstation runs, launch `scripts/oqsolv_watchdog.sh` against the
+  OQSolv process PID. The watchdog is an external last-resort guard for disk
+  and resident-memory growth; the internal TOML safety checks remain the main
+  default protection.
 
 - Investigate blocked PCM potential transformation. The current implementation
   follows the dense Mathematica logic closely enough for validation, but the
@@ -71,6 +78,8 @@ next public repository update or Zenodo archival release.
 - Investigate memory-mapped or binary intermediate storage for
   `ci_pot_normal_mode`, using text export only when legacy compatibility is
   explicitly required.
+- Add an optional compressed or binary normal-mode potential cache so HONO-size
+  runs do not require multi-GB plain-text intermediates on local disks.
 - Exploit state-index symmetry in state/transition potentials by storing only
   triangular `(i, j)` blocks where possible.
 - Consider HDF5/Zarr/NumPy `.npy` internal formats for large tensors to avoid
@@ -80,6 +89,36 @@ next public repository update or Zenodo archival release.
   required.
 - Review whether the PCM cavity transformation admits sparse, low-rank, or
   block-BLAS acceleration for large production systems.
+
+## Computational Performance Improvements
+
+- Profile the HONO/water run by stage:
+  cavity-basis loading, potential-mode transformation, inertial diagonalization,
+  and each OQS-PCM variant. Use wall time and peak memory per stage before
+  optimizing.
+- Avoid recomputing identical Hamiltonian-shift ingredients across variants
+  where the kernel and basis are unchanged. BO, SS-pol, cutoff, first-iteration,
+  and full variants share several contractions.
+- Investigate replacing explicit Python loops in solver contractions with
+  batched `einsum`/BLAS operations where this does not increase peak memory
+  too much.
+- Add chunked/batched contractions for state-specific Hamiltonian shifts so
+  large RI spaces can trade time for lower memory.
+- Cache transformed inertial-basis coupling slices needed by downstream
+  variants, with careful invalidation when the basis, RI dimension, or
+  potential modes change.
+- Add optional parallel execution over corrected target states for independent
+  variants or first-iteration/static variants. Keep this opt-in because each
+  worker can multiply memory pressure.
+- Consider using `scipy.linalg.eigh` subset solvers for cases where only the
+  lowest/targeted eigenpairs are needed, instead of full dense diagonalization.
+- For very large systems, investigate iterative eigensolvers with root tracking
+  if dense diagonalization becomes the dominant cost.
+- Add binary cache formats for solver intermediates so repeated validation runs
+  avoid parsing large text files.
+- Keep a benchmark table for HCl/water and HONO/water after each major
+  optimization so numerical equivalence and performance improvements are both
+  documented.
 
 ## OQS-Onsager
 

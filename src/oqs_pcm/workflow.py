@@ -6,7 +6,7 @@ import numpy as np
 
 from oqs_pcm.cavity import build_cavity_mode_basis, write_cavity_mode_basis
 from oqs_pcm.config import AppConfig
-from oqs_pcm.dielectric import build_dielectric_model, build_state_resolved_kernel_from_lambda
+from oqs_pcm.dielectric import build_dielectric_model, build_kernel_from_lambda, build_state_resolved_kernel_from_lambda
 from oqs_pcm.io import (
     io_load_excited_state_energy_vector,
     io_load_matrix,
@@ -18,7 +18,12 @@ from oqs_pcm.io import (
     io_write_vector,
 )
 from oqs_pcm.models.pcm import build_pcm_kernels
-from oqs_pcm.memory import enforce_memory_estimate, estimate_pcm_potential_mode_memory
+from oqs_pcm.memory import (
+    enforce_disk_estimate,
+    enforce_memory_estimate,
+    estimate_pcm_normal_mode_text_disk,
+    estimate_pcm_potential_mode_memory,
+)
 from oqs_pcm.potential import pcm_add_nuclear_potential_to_state_diagonals, pcm_load_frozen_state_transition_potential_tensor, pcm_load_normal_mode_potential_tensor, transform_coupling_tensor_to_normal_modes
 from oqs_pcm.solver import (
     SolverConfig,
@@ -37,6 +42,8 @@ def build_normal_mode_file(config: AppConfig) -> np.ndarray:
 
     estimate = estimate_pcm_potential_mode_memory(config)
     enforce_memory_estimate(estimate, minimum_available_gb=config.safety.min_available_memory_gb)
+    disk_estimate = estimate_pcm_normal_mode_text_disk(config)
+    enforce_disk_estimate(disk_estimate)
     nts, ve, nuclear = pcm_load_frozen_state_transition_potential_tensor(str(config.paths.ci_potential), config.problem.nsts - 1)
     ve = pcm_add_nuclear_potential_to_state_diagonals(ve, nuclear)
     sm12t = io_load_normal_mode_transformation_matrix(config.paths.sm12t)
@@ -204,6 +211,7 @@ def solve_oqs_pcm(
         "first_full_nodiss",
         "bo",
         "cutoff",
+        "fit_cutoff",
     }
 
     results: dict[str, tuple[np.ndarray, np.ndarray]] = {}
@@ -285,4 +293,15 @@ def solve_oqs_pcm(
         results["bo"] = solve_born_oppenheimer_limit(base_h, reduced_potential, kernels.optical_kernel, solver_cfg)
     if "cutoff" in variant_set:
         results["cutoff"] = solve_cutoff_approximation(base_h, reduced_potential, ri_energies, kernels.optical_kernel, solver_cfg)
+    if "fit_cutoff" in variant_set:
+        fit_kernel = build_kernel_from_lambda(lambda_values, config.problem.fit_epsilon)
+        results["fit_cutoff"] = solve_cutoff_approximation(
+            base_h,
+            reduced_potential,
+            ri_energies,
+            fit_kernel,
+            solver_cfg,
+            label="fit_cutoff",
+            cutoff=config.problem.fit_cutoff,
+        )
     return results

@@ -14,6 +14,8 @@ def _problem(**overrides) -> ProblemConfig:
         convergence_tolerance=1e-6,
         mixing_window=5,
         cutoff=0.1,
+        fit_cutoff=0.2,
+        fit_epsilon=2.5,
         optical_window_min_ev=1.0,
         optical_window_max_ev=2.0,
         hartree_to_ev=27.2114,

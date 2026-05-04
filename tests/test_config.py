@@ -27,6 +27,8 @@ corrected_states = 2
 convergence_tolerance = 1e-6
 mixing_window = 4
 cutoff = 0.1
+fit_cutoff = 0.2
+fit_epsilon = 2.5
 optical_window_min_ev = 1.0
 optical_window_max_ev = 2.0
 hartree_to_ev = 27.2114
@@ -60,6 +62,8 @@ optical_drude_start_index = 1
     assert config.problem.nsts == 5
     assert config.problem.diagonalization_states == 3
     assert config.problem.resolution_of_identity_states == 4
+    assert config.problem.fit_cutoff == 0.2
+    assert config.problem.fit_epsilon == 2.5
     assert config.execution.build_cavity_mode_basis is True
     assert config.execution.build_potential_modes is True
     assert config.execution.reuse_inertial_cache is False
@@ -119,6 +123,8 @@ optical_drude_start_index = 1
     assert config.postprocess.output_dir is None
     assert config.postprocess.dipoles is None
     assert config.postprocess.delta_scf == 0.0
+    assert config.problem.fit_cutoff == 0.5172311136437814
+    assert config.problem.fit_epsilon == 2.0302901591898928
 
 
 def test_load_config_accepts_legacy_build_normal_modes_key(tmp_path: Path) -> None:

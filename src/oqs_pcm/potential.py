@@ -18,29 +18,40 @@ def pcm_load_frozen_state_transition_potential_tensor(path: str, nsts: int) -> t
     def parse_numbers(line: str) -> list[float]:
         return [float(token.replace("D", "E").replace("d", "e")) for token in line.split()]
 
+    def next_nonempty_line(handle) -> str:
+        for raw_line in handle:
+            stripped = raw_line.strip()
+            if stripped:
+                return stripped
+        raise EOFError("Unexpected end of PCM potential file.")
+
     with open(path, encoding="utf-8") as handle:
-        lines = [line.strip() for line in handle if line.strip()]
+        nts = int(parse_numbers(next_nonempty_line(handle))[0])
+        # The legacy file stores a ground-state label line before the
+        # ground-state potential/nuclear rows. Stream the file instead of
+        # materializing all text lines; HONO-size LR-TDDFT files can be >1 GB.
+        next_nonempty_line(handle)
+        ve = np.zeros((nsts + 1, nsts + 1, nts), dtype=float)
 
-    nts = int(parse_numbers(lines[0])[0])
-    ve = np.zeros((nsts + 1, nsts + 1, nts), dtype=float)
+        ground_values = np.empty(nts, dtype=float)
+        nuclear = np.empty(nts, dtype=float)
+        for tessera in range(nts):
+            row = parse_numbers(next_nonempty_line(handle))
+            ground_values[tessera] = row[0]
+            nuclear[tessera] = row[2]
+        ve[0, 0, :] = ground_values
 
-    ground_state_rows = [parse_numbers(line) for line in lines[2: 2 + nts]]
-    ve[0, 0, :] = np.array([row[0] for row in ground_state_rows], dtype=float)
-    nuclear = np.array([row[2] for row in ground_state_rows], dtype=float)
-
-    cursor = 2 + nts
-    rows_per_group = nts + 1
-    num_groups = (len(lines) - cursor) // rows_per_group
-
-    for group_index in range(num_groups):
-        start = cursor + group_index * rows_per_group
-        i_state, j_state = (int(value) for value in parse_numbers(lines[start])[:2])
-        values = np.array(
-            [parse_numbers(lines[start + 1 + tessera])[0] for tessera in range(nts)],
-            dtype=float,
-        )
-        ve[i_state, j_state, :] = values
-        ve[j_state, i_state, :] = values
+        while True:
+            try:
+                label_line = next_nonempty_line(handle)
+            except EOFError:
+                break
+            i_state, j_state = (int(value) for value in parse_numbers(label_line)[:2])
+            values = np.empty(nts, dtype=float)
+            for tessera in range(nts):
+                values[tessera] = parse_numbers(next_nonempty_line(handle))[0]
+            ve[i_state, j_state, :] = values
+            ve[j_state, i_state, :] = values
 
     return nts, ve, nuclear
 
@@ -70,23 +81,62 @@ def transform_coupling_tensor_to_normal_modes(coupling_tensor: np.ndarray, trans
 def pcm_load_normal_mode_potential_tensor(path: str, nsts: int) -> tuple[int, np.ndarray]:
     """Read the PCM normal-mode potential tensor from the legacy text format."""
 
+    def next_nonempty_line(handle) -> str:
+        for raw_line in handle:
+            stripped = raw_line.strip()
+            if stripped:
+                return stripped
+        raise EOFError("Unexpected end of PCM normal-mode potential file.")
+
     with open(path, encoding="utf-8") as handle:
-        lines = [line.strip() for line in handle if line.strip()]
-
-    nts = int(float(lines[0]))
-    tensor = np.zeros((nsts, nsts, nts), dtype=float)
-    cursor = 1
-    rows_per_group = nts + 1
-    num_groups = len(lines[cursor:]) // rows_per_group
-
-    for group_index in range(num_groups):
-        start = cursor + group_index * rows_per_group
-        i_state, j_state = (int(part) for part in lines[start].split())
-        values = np.array([float(item) for item in lines[start + 1: start + 1 + nts]], dtype=float)
-        tensor[i_state - 1, j_state - 1, :] = values
-        tensor[j_state - 1, i_state - 1, :] = values
+        nts = int(float(next_nonempty_line(handle)))
+        tensor = np.zeros((nsts, nsts, nts), dtype=float)
+        while True:
+            try:
+                label_line = next_nonempty_line(handle)
+            except EOFError:
+                break
+            i_state, j_state = (int(part) for part in label_line.split())
+            values = np.empty(nts, dtype=float)
+            for tessera in range(nts):
+                values[tessera] = float(next_nonempty_line(handle))
+            tensor[i_state - 1, j_state - 1, :] = values
+            tensor[j_state - 1, i_state - 1, :] = values
 
     return nts, tensor
+
+
+def pcm_load_ground_normal_mode_potential(path: str) -> tuple[int, np.ndarray]:
+    """Read only the ground-state/ground-state normal-mode potential block.
+
+    The legacy `ci_pot_normal_mode.inp` format starts with `nts`, then the
+    first state-pair label, then `nts` values.  OQSolv writes the upper
+    triangular state pairs in order, so the first block is the ground-state
+    `1 1` block.  Postprocessing uses this block to compute the scalar
+    reference polarization shift `ww`; reading the full multi-GB tensor would
+    be unnecessary for that operation.
+    """
+
+    def next_nonempty_line(handle) -> str:
+        for raw_line in handle:
+            stripped = raw_line.strip()
+            if stripped:
+                return stripped
+        raise EOFError("Unexpected end of PCM normal-mode potential file.")
+
+    with open(path, encoding="utf-8") as handle:
+        nts = int(float(next_nonempty_line(handle)))
+        label_line = next_nonempty_line(handle)
+        i_state, j_state = (int(part) for part in label_line.split())
+        if (i_state, j_state) != (1, 1):
+            raise ValueError(
+                "Expected the first normal-mode potential block to be the "
+                f"ground-state pair `1 1`, got `{i_state} {j_state}`."
+            )
+        values = np.empty(nts, dtype=float)
+        for tessera in range(nts):
+            values[tessera] = float(next_nonempty_line(handle))
+    return nts, values
 
 
 # Backward-compatible aliases used while the naming refactor propagates.

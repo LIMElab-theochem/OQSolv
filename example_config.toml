@@ -16,6 +16,10 @@ corrected_states = 10
 convergence_tolerance = 1e-6
 mixing_window = 10
 cutoff = 0.299561
+# Fitted cutoff branch: same algebra as `cutoff`, but with a fitted dielectric
+# constant and cutoff frequency. Defaults here correspond to water.
+fit_epsilon = 2.0302901591898928
+fit_cutoff = 0.5172311136437814
 optical_window_min_ev = 1.63
 optical_window_max_ev = 3.26
 hartree_to_ev = 27.2114
@@ -48,6 +52,11 @@ min_available_memory_gb = 4.0
 # Conservative multiplier applied to the dense-array memory estimate to account
 # for temporary NumPy/BLAS allocations.
 memory_safety_factor = 2.5
+# Abort before writing large text intermediates if the projected free disk space
+# would fall below this value on the output filesystem.
+min_free_disk_gb = 4.0
+# Conservative multiplier applied to text-output disk estimates.
+disk_safety_factor = 1.25
 
 [dielectric]
 debye_c = [0.47, 72.62]

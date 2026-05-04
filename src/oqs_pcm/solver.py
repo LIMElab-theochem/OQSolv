@@ -402,13 +402,22 @@ def solve_cutoff_approximation(
     energies: np.ndarray,
     optical_kernel: np.ndarray,
     cfg: SolverConfig,
+    *,
+    label: str = "cutoff",
+    cutoff: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Run the cutoff approximation."""
+    """Run the cutoff approximation.
+
+    `fit_cutoff` uses this same algebra with a different dielectric kernel and
+    frequency threshold. Keeping the implementation shared avoids giving the
+    fitted variant any hidden numerical differences beyond those parameters.
+    """
 
     count = min(cfg.corrected_states, base_h.shape[0])
     n = base_h.shape[0]
     nsts = potential.shape[1]
-    theta = (np.abs(energies[:nsts, None] - energies[None, :nsts]) <= cfg.cutoff).astype(float)
+    cutoff_value = cfg.cutoff if cutoff is None else cutoff
+    theta = (np.abs(energies[:nsts, None] - energies[None, :nsts]) <= cutoff_value).astype(float)
     new_energies = np.empty(count, dtype=float)
     new_states = np.empty((count, n), dtype=float)
 
@@ -428,7 +437,7 @@ def solve_cutoff_approximation(
         new_states[state_index, :] = evecs[:, chosen]
 
     if cfg.write_text_exports:
-        io_write_named_results(cfg.output_dir / "cutoff", new_energies, new_states)
+        io_write_named_results(cfg.output_dir / label, new_energies, new_states)
 
     return new_energies, new_states
 

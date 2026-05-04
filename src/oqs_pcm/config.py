@@ -25,6 +25,8 @@ class ProblemConfig:
     convergence_tolerance: float
     mixing_window: int
     cutoff: float
+    fit_cutoff: float
+    fit_epsilon: float
     optical_window_min_ev: float
     optical_window_max_ev: float
     hartree_to_ev: float
@@ -63,6 +65,8 @@ class SafetyConfig:
     max_memory_gb: float
     min_available_memory_gb: float
     memory_safety_factor: float
+    min_free_disk_gb: float
+    disk_safety_factor: float
 
 
 @dataclass(slots=True)
@@ -119,6 +123,8 @@ def load_config(path: str | Path) -> AppConfig:
 
     problem_data = dict(data["problem"])
     problem_data.setdefault("resolution_of_identity_states", None)
+    problem_data.setdefault("fit_cutoff", 0.5172311136437814)
+    problem_data.setdefault("fit_epsilon", 2.0302901591898928)
     execution_data = dict(data["execution"])
     execution_data.setdefault("build_cavity_mode_basis", True)
     if "build_potential_modes" not in execution_data and "build_normal_modes" in execution_data:
@@ -137,6 +143,8 @@ def load_config(path: str | Path) -> AppConfig:
     safety_data.setdefault("max_memory_gb", 24.0)
     safety_data.setdefault("min_available_memory_gb", 4.0)
     safety_data.setdefault("memory_safety_factor", 2.5)
+    safety_data.setdefault("min_free_disk_gb", 4.0)
+    safety_data.setdefault("disk_safety_factor", 1.25)
 
     config = AppConfig(
         paths=PathsConfig(**paths_data),

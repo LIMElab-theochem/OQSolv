@@ -19,6 +19,13 @@ def test_cli_parser_defaults_to_all_mode() -> None:
     assert args.mode == "all"
 
 
+def test_cli_parser_accepts_fit_cutoff_variant() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["run", "example_config.toml", "--variants", "fit_cutoff"])
+
+    assert args.variants == ["fit_cutoff"]
+
+
 def test_cli_parser_accepts_figures_command() -> None:
     parser = build_parser()
     args = parser.parse_args(["figures", "all", "data", "out", "--fontsize", "14"])

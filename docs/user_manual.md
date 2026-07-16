@@ -239,7 +239,11 @@ Each result directory contains:
 - `newenergies.dat`: solvated energies for the corrected states, in atomic
   units
 - `newstates.dat`: expansion coefficients of the solvated states in the chosen
-  reference basis
+  reference basis. For complex-symmetric full OQS-PCM runs these are right
+  eigenvectors with the standard numerical normalization used by the
+  diagonalizer, not c-product-normalized states. OQSolv applies the needed
+  c-product normalization internally when computing complex-symmetric
+  oscillator strengths.
 
 During long state-specific OQS runs, the same directory is updated after each
 completed corrected state with monitoring files:

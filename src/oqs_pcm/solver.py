@@ -335,6 +335,12 @@ def solve_state_specific_family(
             )
 
     if cfg.write_text_exports:
+        # `np.linalg.eig` returns right eigenvectors normalized with the usual
+        # Euclidean norm, as if the problem were Hermitian.  For dissipative
+        # full OQS-PCM branches the Hamiltonian is complex symmetric instead;
+        # property calculations that use these exported states must therefore
+        # apply c-product normalization at the point where the property is
+        # evaluated.
         io_write_named_results(result_dir, new_energies, new_states)
 
     return new_energies, new_states

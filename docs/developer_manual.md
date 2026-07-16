@@ -121,6 +121,15 @@ but are not canonical results. They are also not restart inputs yet; adding
 resume semantics should be a separate change so the solver invariants remain
 easy to audit.
 
+For complex-symmetric OQS branches, `newstates.dat` stores the right
+eigenvectors returned by `np.linalg.eig`.  These vectors follow the numerical
+normalization of the eigensolver, effectively the Euclidean normalization used
+for ordinary Hermitian-looking state vectors.  They are not guaranteed to obey
+`c_i^T c_i = 1`.  Any property formula that depends on the left/right
+structure of the non-Hermitian problem must therefore normalize with the
+c-product when the property is evaluated, as the complex-symmetric
+oscillator-strength path does.
+
 ### Postprocessing and figures
 
 `postprocess/` and `figures/` consume solver output and never reach back into

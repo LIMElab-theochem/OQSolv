@@ -28,8 +28,12 @@ def ground_to_excited_transition_vectors_from_states(observable: np.ndarray, sta
     """Compute ground-to-state transition vectors from solved-state expansions.
 
     The rows of `states` are the solved electronic states exported in
-    `newstates.dat`. The first row is treated as the solved ground state. For
-    each solved state `k`, this evaluates
+    `newstates.dat`.  For non-Hermitian complex-symmetric OQS branches these
+    rows are right eigenvectors as normalized by NumPy/LAPACK, i.e. with a
+    Euclidean convention rather than with the c-product.  This routine only
+    builds the raw transition vector; c-product normalization is applied by the
+    complex-symmetric oscillator-strength routine.  The first row is treated as
+    the solved ground state. For each solved state `k`, this evaluates
 
     `sum_ab observable[a, b, :] * states[0, a] * states[k, b]`.
 

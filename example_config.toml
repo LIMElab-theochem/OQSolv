@@ -41,6 +41,10 @@ dipoles = "/path/to/ci_mut.inp"
 # It is not inferred by OQSolv because it comes from the upstream electronic-
 # structure calculations, not from the OQS diagonalization itself.
 delta_scf = 0.0
+# Optional: "hermitian" or "complex_symmetric".
+# If omitted, OQSolv uses complex_symmetric for dissipative full OQS-PCM
+# spectra and hermitian for BO-sol, SS-pol, cutoff, and fit-cutoff spectra.
+# oscillator_strength_mode = "complex_symmetric"
 
 [safety]
 # Hard process address-space ceiling. This prevents accidental OS-wide memory

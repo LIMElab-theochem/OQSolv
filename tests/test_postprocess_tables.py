@@ -10,6 +10,7 @@ from oqs_pcm.postprocess.observables import (
     transform_state_transition_observable_to_basis,
 )
 from oqs_pcm.postprocess.tables import (
+    resolve_oscillator_strength_mode,
     write_absolute_energy_table,
     write_ground_state_convergence_table,
     write_spectrum_table,
@@ -48,6 +49,38 @@ def test_spectrum_table_uses_energy_differences_so_constant_shift_cancels(tmp_pa
     table = np.loadtxt(output, ndmin=2)
     assert np.allclose(table[:, 0], [0.5])
     assert np.allclose(table[:, 1], [(2.0 / 3.0) * 0.5 * 4.0])
+
+
+def test_spectrum_table_can_use_complex_symmetric_c_product_formula(tmp_path: Path) -> None:
+    result_dir = tmp_path / "full"
+    result_dir.mkdir()
+    (result_dir / "newenergies.dat").write_text("0.0+0.0j\n1.0+0.5j\n", encoding="utf-8")
+    (result_dir / "newstates.dat").write_text(
+        "1.0+1.0j 0.0+0.0j\n0.0+0.0j 2.0+0.0j\n",
+        encoding="utf-8",
+    )
+    dipoles = np.zeros((2, 2, 3), dtype=complex)
+    dipoles[0, 1, 0] = 1.0
+    dipoles[1, 0, 0] = 1.0
+
+    output = write_spectrum_table(
+        result_dir,
+        tmp_path / "full.txt",
+        state_transition_dipoles=dipoles,
+        oscillator_strength_mode="complex_symmetric",
+    )
+
+    table = np.loadtxt(output, ndmin=2)
+    assert np.allclose(table[:, 0], [1.0])
+    assert np.allclose(table[:, 1], [2.0 / 3.0])
+
+
+def test_oscillator_strength_mode_defaults_to_complex_symmetric_only_for_full_branches() -> None:
+    assert resolve_oscillator_strength_mode(None, "full") == "complex_symmetric"
+    assert resolve_oscillator_strength_mode(None, "full_nodiss") == "complex_symmetric"
+    assert resolve_oscillator_strength_mode(None, "bo") == "hermitian"
+    assert resolve_oscillator_strength_mode(None, "ss_pol") == "hermitian"
+    assert resolve_oscillator_strength_mode("hermitian", "full") == "hermitian"
 
 
 def test_ground_state_convergence_table_keeps_nstates_order(tmp_path: Path) -> None:

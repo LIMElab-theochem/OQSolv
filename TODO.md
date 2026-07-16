@@ -25,6 +25,10 @@ next public repository update or Zenodo archival release.
 
 ## Postprocessing
 
+- Keep the complex-symmetric oscillator-strength path validated as the default
+  for dissipative full OQS-PCM spectra.  The Hermitian postprocessing formula is
+  still available for legacy comparisons; decide later whether to deprecate it
+  for non-Hermitian full-frequency branches.
 - Confirm whether `fit_cutoff` should be generated in all standard solver runs
   or only when explicitly requested.
 - Add optional postprocessing support for convergence roots through TOML if the

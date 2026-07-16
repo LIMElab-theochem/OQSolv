@@ -176,6 +176,9 @@ The corresponding TOML section is:
 output_dir = "./figure_tables"
 dipoles = "ci_mut.inp"
 delta_scf = -0.0063860537
+# Optional: "hermitian" or "complex_symmetric".
+# If omitted, OQSolv chooses the appropriate default for each solver branch.
+# oscillator_strength_mode = "complex_symmetric"
 ```
 
 `ww` is not a user option because it must remain coherent with the PCM kernel
@@ -189,6 +192,13 @@ delta_scf = <Psi|H(0) + V/2|Psi>_solvent - <Psi|H(0)|Psi>_gas
 
 It must be taken from the in-solvent and in-vacuo electronic-structure
 calculations. OQSolv does not infer it from `newenergies.dat`.
+
+`oscillator_strength_mode` controls how oscillator strengths are evaluated from
+the solved states. Leave it unset for normal use: OQSolv uses the
+complex-symmetric expression for dissipative full OQS-PCM spectra and the
+Hermitian expression for BO-sol, SS-pol, cutoff, and fit-cutoff spectra. Set it
+explicitly only when comparing against legacy tables or testing a specific
+postprocessing convention.
 
 ## Resource Safety
 

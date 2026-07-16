@@ -18,6 +18,7 @@ from oqs_pcm.models.pcm import build_pcm_kernels
 from oqs_pcm.postprocess.observables import (
     ground_to_excited_transition_vectors_from_states,
     oscillator_strengths,
+    oscillator_strengths_complex_symmetric,
     transform_state_transition_observable_to_basis,
 )
 from oqs_pcm.potential import pcm_load_ground_normal_mode_potential
@@ -39,6 +40,17 @@ DEFAULT_SPECTRA_EXPORTS = {
     "cutoff": "cut.txt",
     "fit_cutoff": "fit.txt",
 }
+
+COMPLEX_SYMMETRIC_DEFAULT_VARIANTS = {
+    "full",
+    "full_nodiss",
+    "full_nodisp_nodiss",
+    "first_full",
+    "first_full_nodiss",
+    "first_full_nodisp_nodiss",
+}
+
+OSCILLATOR_STRENGTH_MODES = {"hermitian", "complex_symmetric"}
 
 DEFAULT_CONVERGENCE_EXPORTS = {
     "full": "GSsolfull.txt",
@@ -91,6 +103,18 @@ def load_result_set(result_dir: str | Path) -> tuple[np.ndarray, np.ndarray]:
     return energies, states
 
 
+def resolve_oscillator_strength_mode(explicit_mode: str | None, variant: str) -> str:
+    """Choose the oscillator-strength scalar product for one solver branch."""
+
+    if explicit_mode is not None:
+        if explicit_mode not in OSCILLATOR_STRENGTH_MODES:
+            raise ValueError("`oscillator_strength_mode` must be 'hermitian' or 'complex_symmetric'.")
+        return explicit_mode
+    if variant in COMPLEX_SYMMETRIC_DEFAULT_VARIANTS:
+        return "complex_symmetric"
+    return "hermitian"
+
+
 def write_absolute_energy_table(
     result_dir: str | Path,
     output_path: str | Path,
@@ -130,18 +154,25 @@ def write_spectrum_table(
     *,
     state_transition_dipoles: np.ndarray,
     reference_shift: float = 0.0,
+    oscillator_strength_mode: str = "hermitian",
 ) -> Path:
     """Write a two-column `(transition energy, oscillator strength)` table.
 
-    The optional `reference_shift` is added before computing oscillator
-    strengths to mirror the notebook, although it cancels from transition
-    energies because both ground and excited states receive the same constant.
+    `oscillator_strength_mode` controls the scalar product used for transition
+    intensities.  `hermitian` keeps the historical Euclidean-norm expression.
+    `complex_symmetric` uses the c-product normalization appropriate for the
+    dissipative full OQS-PCM Hamiltonian.
     """
 
+    if oscillator_strength_mode not in OSCILLATOR_STRENGTH_MODES:
+        raise ValueError("`oscillator_strength_mode` must be 'hermitian' or 'complex_symmetric'.")
     energies, states = load_result_set(result_dir)
     shifted_energies = np.real(energies) + reference_shift
     transition_vectors = ground_to_excited_transition_vectors_from_states(state_transition_dipoles, states)
-    strengths = oscillator_strengths(shifted_energies, transition_vectors)
+    if oscillator_strength_mode == "complex_symmetric":
+        strengths = oscillator_strengths_complex_symmetric(energies + reference_shift, transition_vectors, states)
+    else:
+        strengths = oscillator_strengths(shifted_energies, transition_vectors)
     transition_energies = shifted_energies[1:] - shifted_energies[0]
     output = Path(output_path)
     io_write_matrix(output, np.column_stack((transition_energies, strengths)))
@@ -224,6 +255,10 @@ def write_notebook_equivalent_tables(
                         destination / filename,
                         state_transition_dipoles=dipoles,
                         reference_shift=shift,
+                        oscillator_strength_mode=resolve_oscillator_strength_mode(
+                            config.postprocess.oscillator_strength_mode,
+                            variant,
+                        ),
                     )
                 )
 

@@ -306,12 +306,26 @@ The postprocessing layer transforms solver outputs into reduced tables.
   shifts relevant to that run.
 - spectra tables use transition energies and oscillator strengths, so any
   constant scalar shift cancels from the horizontal axis.
+- oscillator strengths are branch-aware.  Hermitian branches use the usual
+  Euclidean transition-dipole norm.  The dissipative full OQS-PCM branches use
+  the complex-symmetric expression based on the c-product:
+  `f_i = 2/3 Re[(E_i - E_0) sum_alpha mu_0i,alpha^2 / ((c_0^T c_0)(c_i^T c_i))]`.
+  No complex conjugation appears in this normalization because the left
+  eigenvector of a complex-symmetric Hamiltonian is represented by the
+  transpose of the right eigenvector.
 - ground-state solvation free energy tables are convergence tables for the
   scalar ground-state correction.
 
 The practical separation is important: solver outputs remain raw scientific
 results, while the postprocessing layer applies the presentation-level scalar
 shifts needed for the final tables.
+
+The user-facing `postprocess.oscillator_strength_mode` key accepts only
+`hermitian` or `complex_symmetric`.  If it is omitted, `postprocess/tables.py`
+chooses the branch default internally: complex-symmetric for dissipative full
+OQS-PCM spectra and Hermitian for BO-sol, SS-pol, cutoff, and fit-cutoff.  Do
+not expose an `auto` value in TOML; the absence of the key is the automatic
+mode.
 
 ## Resource Safety
 

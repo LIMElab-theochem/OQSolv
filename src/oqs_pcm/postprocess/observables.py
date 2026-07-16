@@ -47,22 +47,55 @@ def ground_to_excited_transition_vectors_from_states(observable: np.ndarray, sta
 
 
 def oscillator_strengths(energies: np.ndarray, transition_vectors: np.ndarray) -> np.ndarray:
-    """Compute oscillator strengths from energies and transition vectors.
+    """Compute oscillator strengths with the Hermitian-state approximation.
 
-    This follows the standard formula used throughout the Mathematica notebooks:
+    This follows the standard real-state expression historically used in the
+    postprocessing layer:
 
     `(2/3) * DeltaE * ||mu||^2`
 
-    The function is intentionally generic:
+    It remains the appropriate default for Hermitian branches such as BO-sol,
+    SS-pol, cutoff, fit-cutoff, and OQS-Onsager variants whose solved states are
+    treated with the usual Euclidean norm.
+    """
 
-    - for PCM-related postprocessing, `transition_vectors` can represent any
-      already transformed transition observable reduced to Cartesian form
-    - for Onsager, the vectors are directly electric dipole moments
+    real_energies = np.real(energies)
+    reference_energy = real_energies[0]
+    strengths = []
+    for state_index in range(1, len(real_energies)):
+        delta_e = real_energies[state_index] - reference_energy
+        strengths.append((2.0 / 3.0) * delta_e * (np.linalg.norm(transition_vectors[state_index]) ** 2))
+    return np.asarray(strengths, dtype=float)
+
+
+def oscillator_strengths_complex_symmetric(
+    energies: np.ndarray,
+    transition_vectors: np.ndarray,
+    states: np.ndarray,
+) -> np.ndarray:
+    """Compute oscillator strengths for complex-symmetric OQS Hamiltonians.
+
+    The dissipative full OQS-PCM Hamiltonian is complex symmetric, not
+    Hermitian.  Its left eigenvector is therefore represented by the transpose
+    of the right eigenvector rather than by the conjugate transpose.  The
+    corresponding scalar product is the c-product, so neither the state
+    normalization nor the dipole square uses complex conjugation:
+
+    `f_i = 2/3 Re[(E_i - E_0) sum_alpha mu_0i,alpha^2 / ((c_0^T c_0)(c_i^T c_i))]`
+
+    This function assumes `transition_vectors` were built with the same
+    transpose convention used by `ground_to_excited_transition_vectors_from_states`.
     """
 
     reference_energy = energies[0]
+    ground_c_norm = np.dot(states[0], states[0])
     strengths = []
     for state_index in range(1, len(energies)):
+        state_c_norm = np.dot(states[state_index], states[state_index])
+        norm_product = ground_c_norm * state_c_norm
+        if abs(norm_product) == 0:
+            raise ValueError("Cannot compute complex-symmetric oscillator strength for a zero c-product norm.")
         delta_e = energies[state_index] - reference_energy
-        strengths.append((2.0 / 3.0) * delta_e * (np.linalg.norm(transition_vectors[state_index]) ** 2))
+        dipole_square = np.sum(transition_vectors[state_index] ** 2)
+        strengths.append((2.0 / 3.0) * np.real(delta_e * dipole_square / norm_product))
     return np.asarray(strengths, dtype=float)

@@ -58,6 +58,7 @@ class PostprocessConfig:
     output_dir: Path | None
     dipoles: Path | None
     delta_scf: float
+    oscillator_strength_mode: str | None
 
 
 @dataclass(slots=True)
@@ -139,6 +140,12 @@ def load_config(path: str | Path) -> AppConfig:
     postprocess_data.setdefault("output_dir", None)
     postprocess_data.setdefault("dipoles", None)
     postprocess_data.setdefault("delta_scf", 0.0)
+    postprocess_data.setdefault("oscillator_strength_mode", None)
+    if postprocess_data["oscillator_strength_mode"] not in {None, "hermitian", "complex_symmetric"}:
+        raise ValueError(
+            "`postprocess.oscillator_strength_mode` must be either "
+            "'hermitian' or 'complex_symmetric' when set."
+        )
     safety_data = dict(data.get("safety", {}))
     safety_data.setdefault("max_memory_gb", 24.0)
     safety_data.setdefault("min_available_memory_gb", 4.0)

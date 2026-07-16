@@ -66,6 +66,7 @@ def _config(
             output_dir=None,
             dipoles=None,
             delta_scf=0.0,
+            oscillator_strength_mode=None,
         ),
         safety=SafetyConfig(
             max_memory_gb=24.0,

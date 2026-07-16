@@ -92,6 +92,9 @@ next public repository update or Zenodo archival release.
 
 ## Computational Performance Improvements
 
+- Add restart/resume support for long state-specific OQS runs from
+  `newenergies_partial.dat`, `newstates_partial.dat`, and `progress.json`.
+  Incremental checkpoint writing is implemented; automatic resume is not.
 - Profile the HONO/water run by stage:
   cavity-basis loading, potential-mode transformation, inertial diagonalization,
   and each OQS-PCM variant. Use wall time and peak memory per stage before

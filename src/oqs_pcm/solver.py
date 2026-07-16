@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 
 import numpy as np
 
 from oqs_pcm.dielectric import build_kernel_from_lambda, build_state_resolved_kernel_from_lambda
-from oqs_pcm.io import io_load_pcm_lambda_eigenvalues, io_write_named_results
+from oqs_pcm.io import io_load_pcm_lambda_eigenvalues, io_write_matrix, io_write_named_results, io_write_vector
 
 
 @dataclass(slots=True)
@@ -307,6 +308,7 @@ def solve_state_specific_family(
     count = min(cfg.corrected_states, base_h.shape[0])
     new_energies = np.empty(count, dtype=complex)
     new_states = np.empty((count, base_h.shape[0]), dtype=complex)
+    result_dir = cfg.output_dir / label
 
     for state_index in range(count):
         energy, state = solve_state_specific_energy_iteratively(
@@ -323,11 +325,46 @@ def solve_state_specific_family(
         )
         new_energies[state_index] = energy
         new_states[state_index, :] = state
+        if cfg.write_text_exports:
+            write_state_specific_progress(
+                result_dir,
+                new_energies[: state_index + 1],
+                new_states[: state_index + 1, :],
+                completed_states=state_index + 1,
+                total_states=count,
+            )
 
     if cfg.write_text_exports:
-        io_write_named_results(cfg.output_dir / label, new_energies, new_states)
+        io_write_named_results(result_dir, new_energies, new_states)
 
     return new_energies, new_states
+
+
+def write_state_specific_progress(
+    result_dir: Path,
+    energies: np.ndarray,
+    states: np.ndarray,
+    *,
+    completed_states: int,
+    total_states: int,
+) -> None:
+    """Write incremental state-specific results for long OQS runs.
+
+    The final `newenergies.dat` and `newstates.dat` files are still written only
+    after the full variant completes.  These partial files are monitoring and
+    recovery aids for expensive full-space calculations; OQSolv does not yet
+    resume from them automatically.
+    """
+
+    result_dir.mkdir(parents=True, exist_ok=True)
+    io_write_vector(result_dir / "newenergies_partial.dat", energies)
+    io_write_matrix(result_dir / "newstates_partial.dat", states)
+    progress = {
+        "completed_states": completed_states,
+        "total_states": total_states,
+        "complete": completed_states >= total_states,
+    }
+    (result_dir / "progress.json").write_text(json.dumps(progress, indent=2) + "\n", encoding="utf-8")
 
 
 def solve_static_state_specific_family(

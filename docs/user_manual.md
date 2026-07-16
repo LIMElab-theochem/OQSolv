@@ -231,6 +231,18 @@ Each result directory contains:
 - `newstates.dat`: expansion coefficients of the solvated states in the chosen
   reference basis
 
+During long state-specific OQS runs, the same directory is updated after each
+completed corrected state with monitoring files:
+
+- `newenergies_partial.dat`: energies for the corrected states completed so far
+- `newstates_partial.dat`: state coefficients for the corrected states
+  completed so far
+- `progress.json`: number of completed corrected states and the requested total
+
+These files let you inspect a long calculation before it finishes. They are not
+yet used for automatic restart; final `newenergies.dat` and `newstates.dat`
+remain the canonical completed outputs.
+
 The postprocessing command writes reduced table files such as:
 
 - level/free-energy tables: `ensspol.txt`, `encorr1.txt`, `encorr2.txt`,

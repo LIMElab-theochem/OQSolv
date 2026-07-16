@@ -112,6 +112,15 @@ This split is deliberate. The solver focuses on the mathematical problem; the
 workflow decides when each stage must be executed and which cached objects are
 still valid.
 
+State-specific OQS branches can require many independent nonlinear solves. For
+long full-space runs, `solve_state_specific_family` writes incremental
+monitoring files after each completed corrected state:
+`newenergies_partial.dat`, `newstates_partial.dat`, and `progress.json`. These
+files deliberately live beside the final `newenergies.dat` and `newstates.dat`
+but are not canonical results. They are also not restart inputs yet; adding
+resume semantics should be a separate change so the solver invariants remain
+easy to audit.
+
 ### Postprocessing and figures
 
 `postprocess/` and `figures/` consume solver output and never reach back into

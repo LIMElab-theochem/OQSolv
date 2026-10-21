@@ -121,6 +121,7 @@ optical_drude_start_index = 1
 
     config = load_config(config_path)
 
+    assert config.execution.build_cavity_mode_basis is True
     assert config.execution.reuse_inertial_cache is True
     assert config.postprocess.output_dir is None
     assert config.postprocess.dipoles is None

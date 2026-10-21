@@ -99,11 +99,11 @@ def build_cavity_mode_basis(
     order = np.argsort(np.abs(eigenvalues))[::-1]
     lambda_values = eigenvalues[order]
     eigenvectors = choose_stable_eigenvector_signs(eigenvectors[:, order])
-    # NumPy returns eigenvectors as columns. Mathematica's `Eigensystem`
-    # returns the eigenvector list as a matrix whose rows are the eigenvectors,
-    # so the row-oriented representation is `eigenvectors.T` after ordering.
-    # This follows the notebook expression `Sm12 . eigen[[2]]`.
-    sm12t = s_minus_half @ eigenvectors.T
+    # NumPy stores eigenvectors as columns, so `eigenvectors` is the article's
+    # T matrix. Store S^(-1/2) T on disk. The normal-mode loader transposes
+    # that file before applying T^dagger S^(-1/2) to potentials, as required by
+    # Eqs. 22 and 24 of the published OQS-PCM(omega) formulation.
+    sm12t = s_minus_half @ eigenvectors
     return lambda_values, sm12t
 
 

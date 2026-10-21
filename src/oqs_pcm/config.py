@@ -127,6 +127,8 @@ def load_config(path: str | Path) -> AppConfig:
     problem_data.setdefault("fit_cutoff", 0.5172311136437814)
     problem_data.setdefault("fit_epsilon", 2.0302901591898928)
     execution_data = dict(data["execution"])
+    # Rebuild the cavity basis by default so Lambda.dat and Sm12T.dat are
+    # generated with the convention used by the frequency-dependent model.
     execution_data.setdefault("build_cavity_mode_basis", True)
     if "build_potential_modes" not in execution_data and "build_normal_modes" in execution_data:
         execution_data["build_potential_modes"] = execution_data.pop("build_normal_modes")

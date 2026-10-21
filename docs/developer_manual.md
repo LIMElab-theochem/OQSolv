@@ -89,6 +89,9 @@ coupling object.
 
 - `cavity.py` and `potential.py` handle the PCM cavity-mode representation and
   the normal-mode transformation.
+- `cavity.py` stores `S^(-1/2) T` in `Sm12T.dat`; `io.py` transposes it on
+  input so potential transformation applies `T^dagger S^(-1/2)`, matching
+  Eqs. 22 and 24 of the published OQS-PCM(omega) formulation.
 - `dielectric.py` maps a frequency-dependent dielectric model to kernel
   factors.
 - `models/pcm.py` combines cavity information, dielectric factors, and the

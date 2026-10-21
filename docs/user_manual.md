@@ -74,6 +74,10 @@ These must satisfy:
 
 Execution switches:
 
+- `build_cavity_mode_basis`:
+  rebuild `Lambda.dat` and `Sm12T.dat` from `mat_SD.inp` and `cavity.inp`
+  using the Eq. 22/24 transformation convention. It defaults to `true` when
+  omitted. Set it to `false` only when reusing a validated pair of basis files.
 - `build_potential_modes`:
   rebuild `ci_pot_normal_mode.inp`
 - `solve_inertial_basis`:

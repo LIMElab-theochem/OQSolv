@@ -71,13 +71,17 @@ class PostprocessSummary:
 
 
 def compute_pcm_reference_polarization_shift(config: AppConfig) -> float:
-    """Compute the corrected internal `ww` shift for absolute postprocessing.
+    """Return the inertial-charge cavity-work correction ``ww``.
 
-    The original notebook used `.5 (Kerneld V).V` with a positive sign.  The
-    physically consistent postprocessing shift has the opposite sign, so OQSolv
-    evaluates `-.5 (Kerneld V).V` internally.  This quantity is deliberately not
-    exposed in the user configuration because it must remain coherent with the
-    PCM kernel and normal-mode potential used by the current calculation.
+    ``delta_scf`` supplies the full static ground-state solvation free energy,
+    while the OQSolv reference basis is equilibrated with the inertial charges:
+    ``q_in = q_0 - q_d``.  The absolute-energy export therefore adds ``-W_d``.
+    OQSolv stores the positive kernel ``K_plus = -K_paper``, so the dynamic
+    work is ``W_d = -1/2 V.T @ Kd_plus @ V`` and ``ww = -W_d`` is positive:
+    ``+1/2 V.T @ Kd_plus @ V``.
+
+    The sign is part of the PCM energy convention and must remain coherent with
+    the normal-mode potential and optical kernel used by the calculation.
     """
 
     _, ground_potential = pcm_load_ground_normal_mode_potential(str(config.paths.normal_mode_potential))
@@ -88,7 +92,9 @@ def compute_pcm_reference_polarization_shift(config: AppConfig) -> float:
         energies=np.zeros(config.problem.nsts, dtype=float),
         optical_window_ev=(config.problem.optical_window_min_ev, config.problem.optical_window_max_ev),
     )
-    return float(-0.5 * np.sum(kernels.optical_kernel * ground_potential * ground_potential))
+    # `delta_scf` already contains W_0.  Add -W_d to obtain the inertial
+    # cavity-charge reference energy, using OQSolv's positive K_plus convention.
+    return float(0.5 * np.sum(kernels.optical_kernel * ground_potential * ground_potential))
 
 
 def load_result_set(result_dir: str | Path) -> tuple[np.ndarray, np.ndarray]:

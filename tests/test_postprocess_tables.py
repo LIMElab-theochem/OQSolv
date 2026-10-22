@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -10,11 +11,42 @@ from oqs_pcm.postprocess.observables import (
     transform_state_transition_observable_to_basis,
 )
 from oqs_pcm.postprocess.tables import (
+    compute_pcm_reference_polarization_shift,
     resolve_oscillator_strength_mode,
     write_absolute_energy_table,
     write_ground_state_convergence_table,
     write_spectrum_table,
 )
+
+
+def test_pcm_reference_shift_adds_dynamic_work_for_inertial_reference(monkeypatch) -> None:
+    ground_potential = np.array([2.0, -1.0])
+    optical_kernel = np.array([0.5, 2.0])
+    fake_config = SimpleNamespace(
+        paths=SimpleNamespace(normal_mode_potential="v0.inp", lambda_file="Lambda.dat"),
+        problem=SimpleNamespace(
+            nsts=2,
+            optical_window_min_ev=1.63,
+            optical_window_max_ev=3.26,
+        ),
+        dielectric=object(),
+    )
+
+    monkeypatch.setattr(
+        "oqs_pcm.postprocess.tables.pcm_load_ground_normal_mode_potential",
+        lambda _: (2, ground_potential),
+    )
+    monkeypatch.setattr(
+        "oqs_pcm.postprocess.tables.build_dielectric_model",
+        lambda _: object(),
+    )
+    monkeypatch.setattr(
+        "oqs_pcm.postprocess.tables.build_pcm_kernels",
+        lambda **_: SimpleNamespace(optical_kernel=optical_kernel),
+    )
+
+    # With K_plus = -K_paper, ww = -W_d = +1/2 V.T K_plus V.
+    assert compute_pcm_reference_polarization_shift(fake_config) == 2.0
 
 
 def test_absolute_energy_table_applies_reference_shift_and_delta_scf(tmp_path: Path) -> None:

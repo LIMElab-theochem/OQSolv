@@ -31,6 +31,18 @@ class ProblemConfig:
     optical_window_max_ev: float
     hartree_to_ev: float
     resolution_of_identity_states: int | None = None
+    selected_states: list[int] | None = None
+
+    def selected_state_indices(self) -> tuple[int, ...]:
+        """Return selected electronic states as zero-based indices.
+
+        TOML state labels are one-based, matching the legacy input files and
+        Mathematica workflow.  ``None`` means retain the complete state space.
+        """
+
+        if self.selected_states is None:
+            return tuple(range(self.nsts))
+        return tuple(state - 1 for state in self.selected_states)
 
 
 @dataclass(slots=True)
@@ -84,6 +96,8 @@ def validate_runtime_dimensions(problem: ProblemConfig) -> None:
     """Validate the coupled dimensions of one OQS-Continuum run."""
 
     n_total_states = problem.nsts
+    selected_states = problem.selected_states
+    effective_states = n_total_states if selected_states is None else len(selected_states)
     n_hamiltonian_states = problem.diagonalization_states
     n_ri_states = problem.resolution_of_identity_states or n_total_states
     n_corrected_states = problem.corrected_states
@@ -96,10 +110,10 @@ def validate_runtime_dimensions(problem: ProblemConfig) -> None:
         raise ValueError("`problem.resolution_of_identity_states` must be at least 1.")
     if n_corrected_states < 1:
         raise ValueError("`problem.corrected_states` must be at least 1.")
-    if n_hamiltonian_states > n_total_states:
-        raise ValueError("`problem.diagonalization_states` cannot exceed `problem.nsts`.")
-    if n_ri_states > n_total_states:
-        raise ValueError("`problem.resolution_of_identity_states` cannot exceed `problem.nsts`.")
+    if n_hamiltonian_states > effective_states:
+        raise ValueError("`problem.diagonalization_states` cannot exceed the selected state count.")
+    if n_ri_states > effective_states:
+        raise ValueError("`problem.resolution_of_identity_states` cannot exceed the selected state count.")
     if n_ri_states < n_hamiltonian_states:
         raise ValueError(
             "`problem.resolution_of_identity_states` cannot be smaller than "
@@ -110,6 +124,15 @@ def validate_runtime_dimensions(problem: ProblemConfig) -> None:
         raise ValueError(
             "`problem.corrected_states` cannot exceed `problem.diagonalization_states`."
         )
+    if selected_states is not None:
+        if len(selected_states) < 1:
+            raise ValueError("`problem.selected_states` must contain at least one state.")
+        if len(set(selected_states)) != len(selected_states):
+            raise ValueError("`problem.selected_states` must not contain duplicates.")
+        if any(state < 1 or state > n_total_states for state in selected_states):
+            raise ValueError("`problem.selected_states` uses one-based labels within `problem.nsts`.")
+        if selected_states[0] != 1:
+            raise ValueError("`problem.selected_states` must start with ground state 1.")
 
 
 def load_config(path: str | Path) -> AppConfig:
@@ -126,6 +149,7 @@ def load_config(path: str | Path) -> AppConfig:
     problem_data.setdefault("resolution_of_identity_states", None)
     problem_data.setdefault("fit_cutoff", 0.5172311136437814)
     problem_data.setdefault("fit_epsilon", 2.0302901591898928)
+    problem_data.setdefault("selected_states", None)
     execution_data = dict(data["execution"])
     # Rebuild the cavity basis by default so Lambda.dat and Sm12T.dat are
     # generated with the convention used by the frequency-dependent model.

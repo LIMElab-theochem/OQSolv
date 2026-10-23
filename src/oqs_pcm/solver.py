@@ -45,11 +45,14 @@ def transform_coupling_tensor_to_inertial_basis(states: np.ndarray, potential: n
     The only requirement is a tensor with shape `(n_state, n_state, n_channel)`.
     """
 
-    transformed_slices = []
-    for tessera_index in range(potential.shape[2]):
-        transformed_slices.append(states @ potential[:, :, tessera_index] @ states.T)
-    stacked = np.stack(transformed_slices, axis=2)
-    return 0.5 * (stacked + np.transpose(stacked, (1, 0, 2)))
+    transformed = np.einsum(
+        "ia,abt,jb->ijt",
+        states,
+        potential,
+        states,
+        optimize=True,
+    )
+    return 0.5 * (transformed + np.transpose(transformed, (1, 0, 2)))
 
 
 def solve_inertial_basis_reference_problem(

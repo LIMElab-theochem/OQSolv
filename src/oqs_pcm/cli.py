@@ -25,7 +25,13 @@ from oqs_pcm.memory import (
     format_disk_estimate,
     format_memory_estimate,
 )
-from oqs_pcm.workflow import build_cavity_mode_basis_files, build_normal_mode_file, solve_oqs_pcm
+from oqs_pcm.workflow import (
+    build_cavity_mode_basis_files,
+    build_normal_mode_file,
+    get_inertial_cache_paths,
+    solve_inertial_basis_only,
+    solve_oqs_pcm,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -39,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("config", type=Path, help="Path to the TOML configuration file.")
     run_parser.add_argument(
         "--mode",
-        choices=("cavity-basis", "potential-modes", "normal-modes", "solve", "all"),
+        choices=("cavity-basis", "potential-modes", "normal-modes", "inertial", "solve", "all"),
         default="all",
         help="Which part of the workflow to run.",
     )
@@ -172,6 +178,14 @@ def main() -> None:
             transformed = build_normal_mode_file(config)
             print(f"Normal-mode potential written to {config.paths.normal_mode_potential}")
             print(f"Tensor shape: {transformed.shape}")
+
+        if args.mode == "inertial":
+            inertial_energies, inertial_states = solve_inertial_basis_only(config)
+            energy_path, state_path = get_inertial_cache_paths(config)
+            print(f"Inertial energies written to {energy_path}")
+            print(f"Inertial states written to {state_path}")
+            print(f"Energy shape: {inertial_energies.shape}; state shape: {inertial_states.shape}")
+            return
 
         if args.mode in {"solve", "all"}:
             results = solve_oqs_pcm(config, requested_variants=set(args.variants) if args.variants else None)

@@ -122,6 +122,37 @@ def ensure_inertial_basis_reference(
     return inertial_energies, inertial_states
 
 
+def solve_inertial_basis_only(config: AppConfig) -> tuple[np.ndarray, np.ndarray]:
+    """Build and solve only the full inertial reference problem.
+
+    This is the public workflow entry point for ``oqs-pcm run --mode
+    inertial``.  It deliberately does not run SS-pol, BO-sol, or any other
+    downstream OQS variant.  The complete source state space is retained in
+    the exported cache so that later selected-state calculations can choose
+    nonconsecutive states without recomputing the inertial basis.
+    """
+
+    _, potential = ensure_normal_mode_potential(config)
+    energies = io_load_excited_state_energy_vector(
+        config.paths.ci_energy,
+        config.problem.hartree_to_ev,
+    )[: config.problem.nsts]
+    dielectric = build_dielectric_model(config.dielectric)
+    kernels = build_pcm_kernels(
+        lambda_path=config.paths.lambda_file,
+        dielectric_model=dielectric,
+        energies=energies,
+        optical_window_ev=(config.problem.optical_window_min_ev, config.problem.optical_window_max_ev),
+    )
+    return ensure_inertial_basis_reference(
+        config,
+        energies,
+        potential,
+        kernels.optical_kernel,
+        force_recompute=should_recompute_inertial_basis(config),
+    )
+
+
 def solve_oqs_pcm(
     config: AppConfig,
     requested_variants: set[str] | None = None,
@@ -140,13 +171,19 @@ def solve_oqs_pcm(
 
     _, potential = ensure_normal_mode_potential(config)
     dielectric = build_dielectric_model(config.dielectric)
-    energies = io_load_excited_state_energy_vector(config.paths.ci_energy, config.problem.hartree_to_ev)[: config.problem.nsts]
+    energies = io_load_excited_state_energy_vector(
+        config.paths.ci_energy,
+        config.problem.hartree_to_ev,
+    )[: config.problem.nsts]
+    selected_indices = np.asarray(config.problem.selected_state_indices(), dtype=int)
+    all_states_selected = config.problem.selected_states is None
+    effective_nsts = len(selected_indices)
     ri_states = config.problem.resolution_of_identity_states or config.problem.nsts
 
     kernels = build_pcm_kernels(
         lambda_path=config.paths.lambda_file,
         dielectric_model=dielectric,
-        energies=energies[:ri_states],
+        energies=energies[selected_indices][:ri_states],
         optical_window_ev=(config.problem.optical_window_min_ev, config.problem.optical_window_max_ev),
     )
     lambda_values = io_load_pcm_lambda_eigenvalues(config.paths.lambda_file)
@@ -160,7 +197,7 @@ def solve_oqs_pcm(
     output_dir = config.paths.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     solver_cfg = SolverConfig(
-        nsts=config.problem.nsts,
+        nsts=effective_nsts,
         diagonalization_states=config.problem.diagonalization_states,
         corrected_states=min(config.problem.corrected_states, config.problem.diagonalization_states),
         tolerance=config.problem.convergence_tolerance,
@@ -192,6 +229,10 @@ def solve_oqs_pcm(
             force_recompute=should_recompute_inertial_basis(config),
         )
         potential = transform_coupling_tensor_to_inertial_basis(inertial_states, potential)
+
+    if not all_states_selected:
+        potential = potential[np.ix_(selected_indices, selected_indices, np.arange(potential.shape[2]))]
+        inertial_energies = inertial_energies[selected_indices]
 
     base_h = build_reference_diagonal_hamiltonian(inertial_energies, config.problem.diagonalization_states)
     # `diagonalization_states` is the explicit Hamiltonian dimension, while

@@ -12,6 +12,13 @@ def test_cli_parser_accepts_all_mode() -> None:
     assert args.mode == "all"
 
 
+def test_cli_parser_accepts_inertial_mode() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["run", "example_config.toml", "--mode", "inertial"])
+
+    assert args.mode == "inertial"
+
+
 def test_cli_parser_defaults_to_all_mode() -> None:
     parser = build_parser()
     args = parser.parse_args(["run", "example_config.toml"])

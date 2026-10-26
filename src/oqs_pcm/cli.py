@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from pathlib import Path
 
-from oqs_pcm.config import load_config
+from oqs_pcm.config import load_config, validate_runtime_dimensions
 from oqs_pcm.dipole_completion import (
     compare_ground_transition_dipoles_to_reference,
     complete_ci_mut_file,
@@ -29,6 +30,7 @@ from oqs_pcm.workflow import (
     build_cavity_mode_basis_files,
     build_normal_mode_file,
     get_inertial_cache_paths,
+    get_inertial_artifact_paths,
     solve_inertial_basis_only,
     solve_oqs_pcm,
 )
@@ -66,6 +68,31 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         help="Optional subset of solver variants to run. By default all supported PCM variants are computed.",
     )
+    run_parser.add_argument("--output-dir", type=Path, help="Override [paths].output_dir for this run.")
+    run_parser.add_argument("--normal-mode-potential", type=Path, help="Override [paths].normal_mode_potential.")
+    run_parser.add_argument("--sm12t", type=Path, help="Override [paths].sm12t.")
+    run_parser.add_argument("--lambda-file", type=Path, help="Override [paths].lambda_file.")
+    run_parser.add_argument("--dipoles", type=Path, help="Override [postprocess].dipoles.")
+    run_parser.add_argument("--selected-states", nargs="+", type=int, help="One-based state labels, starting with state 1.")
+    run_parser.add_argument("--diagonalization-states", type=int)
+    run_parser.add_argument("--resolution-of-identity-states", type=int)
+    run_parser.add_argument("--corrected-states", type=int)
+    run_parser.add_argument("--potential-basis", choices=("normal_mode", "frozen"))
+    for option in (
+        "build_cavity_mode_basis",
+        "build_potential_modes",
+        "solve_inertial_basis",
+        "reuse_inertial_cache",
+        "write_inertial_potentials",
+        "write_inertial_dipoles",
+    ):
+        run_parser.add_argument(
+            f"--{option.replace('_', '-')}",
+            f"--no-{option.replace('_', '-')}",
+            dest=option,
+            action=argparse.BooleanOptionalAction,
+            default=None,
+        )
 
     estimate_parser = subparsers.add_parser(
         "estimate-memory",
@@ -116,6 +143,17 @@ def build_parser() -> argparse.ArgumentParser:
         metavar=("NSTS", "OUTPUT_ROOT"),
         help="Optional convergence source: total-state count and OQSolv output root containing variant directories.",
     )
+    postprocess_parser.add_argument(
+        "--solver-output-dir",
+        type=Path,
+        help="Override [paths].output_dir containing solver result directories.",
+    )
+    postprocess_parser.add_argument(
+        "--selected-states",
+        nargs="+",
+        type=int,
+        help="One-based state labels used only to reduce postprocessed dipoles.",
+    )
 
     prep_parser = subparsers.add_parser("prep-gamess", help="Extract OQSolv ingredient files from a GAMESS-US log.")
     prep_parser.add_argument("log_file", type=Path, help="GAMESS-US log file.")
@@ -156,6 +194,62 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def apply_run_overrides(config, args):
+    """Apply optional command-line overrides to one loaded TOML config."""
+
+    path_updates = {}
+    for argument, field in (
+        ("output_dir", "output_dir"),
+        ("normal_mode_potential", "normal_mode_potential"),
+        ("sm12t", "sm12t"),
+        ("lambda_file", "lambda_file"),
+    ):
+        value = getattr(args, argument)
+        if value is not None:
+            path_updates[field] = value
+    if path_updates:
+        config = replace(config, paths=replace(config.paths, **path_updates))
+
+    postprocess_updates = {}
+    if args.dipoles is not None:
+        postprocess_updates["dipoles"] = args.dipoles
+    if postprocess_updates:
+        config = replace(config, postprocess=replace(config.postprocess, **postprocess_updates))
+
+    problem_updates = {}
+    for argument, field in (
+        ("selected_states", "selected_states"),
+        ("diagonalization_states", "diagonalization_states"),
+        ("resolution_of_identity_states", "resolution_of_identity_states"),
+        ("corrected_states", "corrected_states"),
+    ):
+        value = getattr(args, argument)
+        if value is not None:
+            problem_updates[field] = value
+    if problem_updates:
+        config = replace(config, problem=replace(config.problem, **problem_updates))
+
+    execution_updates = {}
+    if args.potential_basis is not None:
+        execution_updates["potential_basis"] = args.potential_basis
+    for field in (
+        "build_cavity_mode_basis",
+        "build_potential_modes",
+        "solve_inertial_basis",
+        "reuse_inertial_cache",
+        "write_inertial_potentials",
+        "write_inertial_dipoles",
+    ):
+        value = getattr(args, field)
+        if value is not None:
+            execution_updates[field] = value
+    if execution_updates:
+        config = replace(config, execution=replace(config.execution, **execution_updates))
+
+    validate_runtime_dimensions(config.problem)
+    return config
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
@@ -166,6 +260,7 @@ def main() -> None:
 
     if args.command in {None, "run"}:
         config = load_config(args.config)
+        config = apply_run_overrides(config, args)
         apply_process_memory_limit(config.safety.max_memory_gb)
 
         if args.mode in {"cavity-basis", "all"}:
@@ -185,6 +280,13 @@ def main() -> None:
             print(f"Inertial energies written to {energy_path}")
             print(f"Inertial states written to {state_path}")
             print(f"Energy shape: {inertial_energies.shape}; state shape: {inertial_states.shape}")
+            if config.execution.write_inertial_potentials or config.execution.write_inertial_dipoles:
+                for name, path in get_inertial_artifact_paths(config).items():
+                    if path.exists() and (
+                        (name != "dipoles" and config.execution.write_inertial_potentials)
+                        or (name == "dipoles" and config.execution.write_inertial_dipoles)
+                    ):
+                        print(f"Inertial {name} written to {path}")
             return
 
         if args.mode in {"solve", "all"}:
@@ -226,11 +328,25 @@ def main() -> None:
 
     if args.command == "postprocess":
         config = load_config(args.config)
+        path_updates = {}
+        if args.solver_output_dir is not None:
+            path_updates["output_dir"] = args.solver_output_dir
+        if path_updates:
+            config = replace(config, paths=replace(config.paths, **path_updates))
         output_dir = args.output_dir or config.postprocess.output_dir
         dipoles = args.dipoles or config.postprocess.dipoles
         delta_scf = args.delta_scf if args.delta_scf is not None else config.postprocess.delta_scf
         if output_dir is None:
             raise SystemExit("Missing postprocess output directory. Set [postprocess].output_dir or pass --output-dir.")
+        selected_state_indices = None
+        if args.selected_states is not None:
+            if not args.selected_states or args.selected_states[0] != 1:
+                raise SystemExit("--selected-states must start with one-based state 1.")
+            if len(set(args.selected_states)) != len(args.selected_states) or any(
+                state < 1 or state > config.problem.nsts for state in args.selected_states
+            ):
+                raise SystemExit("--selected-states contains duplicate or out-of-range labels.")
+            selected_state_indices = tuple(state - 1 for state in args.selected_states)
         convergence_roots = None
         if args.convergence_root:
             convergence_roots = {int(nstates): Path(root) for nstates, root in args.convergence_root}
@@ -243,6 +359,7 @@ def main() -> None:
             include_spectra=not args.skip_spectra,
             include_convergence=bool(convergence_roots),
             convergence_roots_by_nstates=convergence_roots,
+            selected_state_indices=selected_state_indices,
         )
         print(f"Postprocessed tables written to {output_dir}")
         print(f"Reference polarization shift ww: {summary.reference_shift:.16e} Hartree")

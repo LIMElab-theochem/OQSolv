@@ -407,6 +407,20 @@ The only stage that should control the rest of the workflow is the model and
 cache state. A change in the coupling object must invalidate any cached inertial
 representation derived from it.
 
+### Debug-only execution state
+
+Ad hoc validation runs may assign `paths.inertial_cache_dir` so several
+independent result directories share one validated `inertial_diag<N>` cache.
+This is developer infrastructure, not a normal user-facing workflow;
+ordinary configurations should continue to use `paths.output_dir` for the
+cache, and the override must remain absent from `example_config.toml`.
+
+Developer-only validation may also set `execution.potential_basis` to
+`normal_mode` or `frozen`. `normal_mode` uses the internally generated
+normal-mode coupling; `frozen` uses the original PCM state/transition
+potential while reusing previously computed inertial states. This switch must
+not be confused with either the normal-mode cache or the inertial-state cache.
+
 ## Validation and Regression
 
 The project keeps two validation tiers.

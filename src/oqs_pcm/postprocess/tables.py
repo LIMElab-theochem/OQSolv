@@ -191,13 +191,13 @@ def load_postprocess_dipoles(
     total_states: int,
     inertial_state_file: str | Path | None = None,
 ) -> np.ndarray:
-    """Load dipoles and optionally transform them to the inertial basis."""
+    """Load and optionally transform the complete dipole tensor."""
 
     dipoles = io_load_state_transition_dipole_tensor(dipole_file, nsts=total_states - 1)
-    if inertial_state_file is None:
-        return dipoles
-    inertial_states = io_load_matrix(inertial_state_file)
-    return transform_state_transition_observable_to_basis(dipoles, inertial_states)
+    if inertial_state_file is not None:
+        inertial_states = io_load_matrix(inertial_state_file)
+        dipoles = transform_state_transition_observable_to_basis(dipoles, inertial_states)
+    return dipoles
 
 
 def write_notebook_equivalent_tables(
@@ -213,6 +213,7 @@ def write_notebook_equivalent_tables(
     level_exports: dict[str, str] | None = None,
     convergence_exports: dict[str, str] | None = None,
     convergence_roots_by_nstates: dict[int, Path] | None = None,
+    selected_state_indices: tuple[int, ...] | None = None,
 ) -> PostprocessSummary:
     """Generate the clean table layer formerly assembled in `figures-new.nb`.
 
@@ -252,6 +253,12 @@ def write_notebook_equivalent_tables(
             total_states=config.problem.nsts,
             inertial_state_file=inertial_state_file,
         )
+        effective_selected_states = selected_state_indices
+        if effective_selected_states is None and config.problem.selected_states is not None:
+            effective_selected_states = config.problem.selected_state_indices()
+        if effective_selected_states is not None:
+            indices = np.asarray(effective_selected_states, dtype=int)
+            dipoles = dipoles[np.ix_(indices, indices, np.arange(dipoles.shape[2]))]
         for variant, filename in (spectra_exports or DEFAULT_SPECTRA_EXPORTS).items():
             result_dir = config.paths.output_dir / variant
             if result_dir.exists():

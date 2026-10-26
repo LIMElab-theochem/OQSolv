@@ -15,6 +15,7 @@ class PathsConfig:
     sm12t: Path
     lambda_file: Path
     output_dir: Path
+    inertial_cache_dir: Path | None = None
 
 
 @dataclass(slots=True)
@@ -53,6 +54,9 @@ class ExecutionConfig:
     solve_inertial_basis: bool
     reuse_inertial_cache: bool
     write_text_exports: bool
+    write_inertial_potentials: bool = False
+    write_inertial_dipoles: bool = False
+    potential_basis: str = "normal_mode"
 
 
 @dataclass(slots=True)
@@ -157,8 +161,17 @@ def load_config(path: str | Path) -> AppConfig:
     if "build_potential_modes" not in execution_data and "build_normal_modes" in execution_data:
         execution_data["build_potential_modes"] = execution_data.pop("build_normal_modes")
     execution_data.setdefault("reuse_inertial_cache", True)
+    execution_data.setdefault("write_inertial_potentials", False)
+    execution_data.setdefault("write_inertial_dipoles", False)
+    execution_data.setdefault("potential_basis", "normal_mode")
+    if execution_data["potential_basis"] not in {"normal_mode", "frozen"}:
+        raise ValueError("`execution.potential_basis` must be `normal_mode` or `frozen`.")
 
-    paths_data = {key: Path(value) for key, value in data["paths"].items()}
+    paths_data = dict(data["paths"])
+    paths_data.setdefault("inertial_cache_dir", None)
+    for key, value in paths_data.items():
+        if value is not None:
+            paths_data[key] = Path(value)
     postprocess_data = dict(data.get("postprocess", {}))
     for key in ("output_dir", "dipoles"):
         if postprocess_data.get(key) is not None:

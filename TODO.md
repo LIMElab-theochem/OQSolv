@@ -79,6 +79,13 @@ next public repository update or Zenodo archival release.
   follows the dense Mathematica logic closely enough for validation, but the
   transformation can likely be performed over chunks of states or cavity
   channels to reduce peak memory.
+- The current text readers still parse line by line into dense in-memory
+  tensors, and the inertial artifact writer still forms complete transformed
+  tensors before writing. Implement a genuinely out-of-core path: chunked
+  readers/writers or memory-mapped intermediates for frozen and normal-mode
+  potentials, bounded-memory contractions for inertial transformations, and
+  explicit peak-memory/disk validation for each block size. Preserve the full
+  `N x N` artifact semantics and legacy text format when requested.
 - Investigate memory-mapped or binary intermediate storage for
   `ci_pot_normal_mode`, using text export only when legacy compatibility is
   explicitly required.

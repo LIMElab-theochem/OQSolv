@@ -407,6 +407,32 @@ The only stage that should control the rest of the workflow is the model and
 cache state. A change in the coupling object must invalidate any cached inertial
 representation derived from it.
 
+### Basis and artifact invariants
+
+The following conventions are part of the scientific interface:
+
+- `potential_basis = "normal_mode"` means that the input tensor is in the
+  frozen normal-mode representation and is transformed to the inertial basis
+  by the workflow.
+- `potential_basis = "normal_mode_inertial"` means that the complete input
+  tensor has already undergone that transformation. The workflow must not
+  rotate it a second time; it reuses the matching inertial energy cache.
+- `potential_basis = "frozen"` transforms the original frozen PCM tensor and
+  is retained as a generic validation route, not as a separate solver
+  convention.
+- Potential and dipole transformations are complete-basis operations. Any
+  `selected_states` restriction is applied only after transformation and must
+  not change the dimensions of exported inertial artifacts.
+- `postprocess.dipole_basis = "frozen"` requires the inertial-state matrix for
+  dipole transformation. `"inertial"` consumes a complete already transformed
+  dipole tensor and must not load or apply that matrix again.
+- When normal-mode potentials are generated in memory, artifact writing uses
+  that tensor directly; it must not reread the text export merely to transform
+  it.
+
+The opt-in artifact flags are deliberately independent: potential and dipole
+exports can be requested separately, and both remain disabled by default.
+
 ### Debug-only execution state
 
 Ad hoc validation runs may assign `paths.inertial_cache_dir` so several
@@ -416,10 +442,19 @@ ordinary configurations should continue to use `paths.output_dir` for the
 cache, and the override must remain absent from `example_config.toml`.
 
 Developer-only validation may also set `execution.potential_basis` to
-`normal_mode` or `frozen`. `normal_mode` uses the internally generated
-normal-mode coupling; `frozen` uses the original PCM state/transition
-potential while reusing previously computed inertial states. This switch must
-not be confused with either the normal-mode cache or the inertial-state cache.
+`normal_mode`, `normal_mode_inertial`, or `frozen`. `normal_mode` uses the
+normal-mode coupling before the inertial transformation;
+`normal_mode_inertial` loads a complete potential already transformed to the
+inertial basis; and `frozen` uses the original cavity potential while reusing
+previously computed inertial states. The corresponding
+`postprocess.dipole_basis` declares whether the dipole file is still frozen or
+already inertial. These switches must not be confused with either the
+normal-mode cache or the inertial-state cache.
+
+The public defaults should remain on the generated normal-mode route. The
+pre-transformed route is useful for controlled reuse and reproducibility, but
+must reject a missing or incompatible inertial cache and must never silently
+retransform the supplied tensor.
 
 ## Validation and Regression
 

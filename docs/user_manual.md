@@ -86,6 +86,9 @@ Execution switches:
 - `reuse_inertial_cache`:
   if the inertial basis is requested and cached inertial files already exist,
   reuse them instead of recomputing
+- `write_inertial_potentials` and `write_inertial_dipoles`:
+  opt-in exports of complete potential and dipole tensors in the inertial basis;
+  both default to `false`
 
 Practical rule:
 
@@ -94,6 +97,28 @@ Practical rule:
   reused too
 - `fit_cutoff` follows the same basis-choice rule as `cutoff`; it differs only
   by using `[problem].fit_epsilon` and `[problem].fit_cutoff`
+
+### Inertial-basis artifacts
+
+When `solve_inertial_basis = true`, set either export switch to write the
+corresponding complete-basis artifact below
+`[paths].output_dir/inertial_artifacts/`:
+
+- `ci_pot_inertial.inp` and `ci_pot_normal_mode_inertial.inp` when
+  `write_inertial_potentials = true`
+- `ci_mut_inertial.inp` when `write_inertial_dipoles = true`
+
+These files contain the full `N x N` basis used by the run. They are not reduced
+when `problem.selected_states` is set; state selection is applied only to the
+subsequent solver or postprocessing calculation. The two potential exports are
+independent of whether the normal-mode tensor was generated in the same run.
+
+An already transformed normal-mode potential can be reused by setting
+`execution.potential_basis = "normal_mode_inertial"` and providing
+`paths.inertial_normal_mode_potential`. This advanced route must use the
+matching inertial energy cache and does not regenerate inertial artifacts. The
+default and recommended route remains `potential_basis = "normal_mode"`, in
+which OQSolv performs the transformation itself.
 
 ## Input Files
 
@@ -179,6 +204,7 @@ The corresponding TOML section is:
 [postprocess]
 output_dir = "./figure_tables"
 dipoles = "ci_mut.inp"
+dipole_basis = "frozen" # use "inertial" for ci_mut_inertial.inp
 delta_scf = -0.0063860537
 # Optional: "hermitian" or "complex_symmetric".
 # If omitted, OQSolv chooses the appropriate default for each solver branch.
@@ -196,6 +222,11 @@ delta_scf = <Psi|H(0) + V/2|Psi>_solvent - <Psi|H(0)|Psi>_gas
 
 It must be taken from the in-solvent and in-vacuo electronic-structure
 calculations. OQSolv does not infer it from `newenergies.dat`.
+
+Set `postprocess.dipole_basis = "inertial"` when `dipoles` already contains
+the complete dipole tensor in the inertial basis. OQSolv then uses it directly
+and does not apply the inertial-state transformation again. Leave the default
+`"frozen"` when the dipoles are in the original frozen-solvent basis.
 
 `oscillator_strength_mode` controls how oscillator strengths are evaluated from
 the solved states. Leave it unset for normal use: OQSolv uses the

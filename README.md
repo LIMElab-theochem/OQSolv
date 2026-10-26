@@ -32,20 +32,18 @@ different levels of approximation and computational cost.
 
 ## Installation
 
-Requirements:
+For a complete Linux installation, including operating-system prerequisites,
+virtual-environment setup, verification, and troubleshooting, see
+[Linux Installation Guide](docs/installation_linux.md).
 
-- Python 3.11 or newer
-- NumPy
-- Matplotlib
-- SymPy
-
-Install from a local clone:
+The short installation path is:
 
 ```bash
-git clone https://github.com/gabriel-gil/OQSolv.git
+git clone https://github.com/LIMElab-theochem/OQSolv.git
 cd OQSolv
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
 python -m pip install -e .
 ```
 

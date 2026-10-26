@@ -31,10 +31,16 @@ You need:
 
 ## Installation
 
+For a robust Linux installation from a machine with no prepared Python
+environment, follow the [Linux Installation Guide](installation_linux.md).
+
+The minimal commands after Python 3.11 and `python3-venv` are available are:
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e .
 ```
 
 ## Configuration
@@ -151,6 +157,9 @@ Practical notes:
   eigenvalue inputs used to build the normal-mode potential.
 
 ## Commands
+
+For a compact, exhaustive list of CLI commands, modes, variants, and options,
+see [OQSolv Command Glossary](command_glossary.md).
 
 Build only the normal-mode potential:
 

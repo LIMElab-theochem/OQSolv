@@ -16,6 +16,7 @@ class PathsConfig:
     lambda_file: Path
     output_dir: Path
     inertial_cache_dir: Path | None = None
+    inertial_normal_mode_potential: Path | None = None
 
 
 @dataclass(slots=True)
@@ -75,6 +76,7 @@ class PostprocessConfig:
     dipoles: Path | None
     delta_scf: float
     oscillator_strength_mode: str | None
+    dipole_basis: str = "frozen"
 
 
 @dataclass(slots=True)
@@ -164,11 +166,15 @@ def load_config(path: str | Path) -> AppConfig:
     execution_data.setdefault("write_inertial_potentials", False)
     execution_data.setdefault("write_inertial_dipoles", False)
     execution_data.setdefault("potential_basis", "normal_mode")
-    if execution_data["potential_basis"] not in {"normal_mode", "frozen"}:
-        raise ValueError("`execution.potential_basis` must be `normal_mode` or `frozen`.")
+    if execution_data["potential_basis"] not in {"normal_mode", "normal_mode_inertial", "frozen"}:
+        raise ValueError(
+            "`execution.potential_basis` must be `normal_mode`, "
+            "`normal_mode_inertial`, or `frozen`."
+        )
 
     paths_data = dict(data["paths"])
     paths_data.setdefault("inertial_cache_dir", None)
+    paths_data.setdefault("inertial_normal_mode_potential", None)
     for key, value in paths_data.items():
         if value is not None:
             paths_data[key] = Path(value)
@@ -180,6 +186,9 @@ def load_config(path: str | Path) -> AppConfig:
     postprocess_data.setdefault("dipoles", None)
     postprocess_data.setdefault("delta_scf", 0.0)
     postprocess_data.setdefault("oscillator_strength_mode", None)
+    postprocess_data.setdefault("dipole_basis", "frozen")
+    if postprocess_data["dipole_basis"] not in {"frozen", "inertial"}:
+        raise ValueError("`postprocess.dipole_basis` must be `frozen` or `inertial`.")
     if postprocess_data["oscillator_strength_mode"] not in {None, "hermitian", "complex_symmetric"}:
         raise ValueError(
             "`postprocess.oscillator_strength_mode` must be either "

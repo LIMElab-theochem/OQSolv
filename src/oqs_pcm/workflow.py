@@ -75,6 +75,30 @@ def ensure_normal_mode_potential(config: AppConfig) -> tuple[int, np.ndarray]:
     return pcm_load_normal_mode_potential_tensor(str(potential_path), config.problem.nsts)
 
 
+def load_inertial_normal_mode_potential(config: AppConfig) -> tuple[int, np.ndarray]:
+    """Load a complete normal-mode potential already in the inertial basis."""
+
+    potential_path = config.paths.inertial_normal_mode_potential
+    if potential_path is None:
+        raise ValueError(
+            "`paths.inertial_normal_mode_potential` is required when "
+            "`execution.potential_basis = normal_mode_inertial`."
+        )
+    return pcm_load_normal_mode_potential_tensor(str(potential_path), config.problem.nsts)
+
+
+def load_inertial_energies(config: AppConfig) -> np.ndarray:
+    """Load inertial reference energies without loading the basis vectors."""
+
+    energy_path, _ = get_inertial_cache_paths(config)
+    if not energy_path.exists():
+        raise FileNotFoundError(
+            "The pre-transformed potential requires inertial energies at "
+            f"{energy_path}."
+        )
+    return io_load_vector(energy_path)
+
+
 def get_inertial_cache_paths(config: AppConfig) -> tuple[Path, Path]:
     """Return the standard cache locations for inertial-basis intermediates."""
 
@@ -207,6 +231,11 @@ def solve_inertial_basis_only(config: AppConfig) -> tuple[np.ndarray, np.ndarray
     nonconsecutive states without recomputing the inertial basis.
     """
 
+    if config.execution.potential_basis != "normal_mode":
+        raise ValueError(
+            "The standalone inertial reference solve requires "
+            "`execution.potential_basis = normal_mode`."
+        )
     _, potential = ensure_normal_mode_potential(config)
     energies = io_load_excited_state_energy_vector(
         config.paths.ci_energy,
@@ -246,7 +275,20 @@ def solve_oqs_pcm(
     distinction belongs in the coupling builder, not in the eigensolver engine.
     """
 
-    if config.execution.potential_basis == "frozen":
+    potential_is_already_inertial = config.execution.potential_basis == "normal_mode_inertial"
+    if potential_is_already_inertial:
+        _, potential = load_inertial_normal_mode_potential(config)
+        if not config.execution.solve_inertial_basis:
+            raise ValueError(
+                "A pre-transformed normal-mode potential requires "
+                "`execution.solve_inertial_basis = true`."
+            )
+        if config.execution.write_inertial_potentials or config.execution.write_inertial_dipoles:
+            raise ValueError(
+                "Pre-transformed normal-mode input cannot regenerate inertial artifacts; "
+                "use the original normal-mode input for that stage."
+            )
+    elif config.execution.potential_basis == "frozen":
         _, potential, nuclear = pcm_load_frozen_state_transition_potential_tensor(
             str(config.paths.ci_potential), config.problem.nsts - 1
         )
@@ -304,15 +346,23 @@ def solve_oqs_pcm(
         # - inertial-cache reuse is independent from potential-mode reuse,
         #   except that a fresh potential-mode build invalidates any previous
         #   inertial cache because the basis-defining tensor has changed.
-        inertial_energies, inertial_states = ensure_inertial_basis_reference(
-            config,
-            energies,
-            potential,
-            kernels.optical_kernel,
-            force_recompute=should_recompute_inertial_basis(config),
-        )
-        write_inertial_basis_artifacts(config, potential, inertial_states)
-        potential = transform_coupling_tensor_to_inertial_basis(inertial_states, potential)
+        if potential_is_already_inertial:
+            if should_recompute_inertial_basis(config):
+                raise ValueError(
+                    "A pre-transformed normal-mode potential requires reuse of "
+                    "an existing inertial cache."
+                )
+            inertial_energies = load_inertial_energies(config)
+        else:
+            inertial_energies, inertial_states = ensure_inertial_basis_reference(
+                config,
+                energies,
+                potential,
+                kernels.optical_kernel,
+                force_recompute=should_recompute_inertial_basis(config),
+            )
+            write_inertial_basis_artifacts(config, potential, inertial_states)
+            potential = transform_coupling_tensor_to_inertial_basis(inertial_states, potential)
 
     if not all_states_selected:
         potential = potential[np.ix_(selected_indices, selected_indices, np.arange(potential.shape[2]))]

@@ -13,7 +13,12 @@ from oqs_pcm.config import (
 )
 from oqs_pcm.io import io_load_state_transition_dipole_tensor
 from oqs_pcm.potential import pcm_load_normal_mode_potential_tensor
-from oqs_pcm.workflow import ensure_normal_mode_potential, write_inertial_basis_artifacts
+from oqs_pcm.postprocess.tables import load_postprocess_dipoles
+from oqs_pcm.workflow import (
+    ensure_normal_mode_potential,
+    load_inertial_normal_mode_potential,
+    write_inertial_basis_artifacts,
+)
 
 
 def make_config(tmp_path: Path) -> AppConfig:
@@ -126,3 +131,40 @@ def test_generated_normal_modes_are_not_reloaded(tmp_path: Path, monkeypatch) ->
 
     assert nts == 2
     np.testing.assert_array_equal(result, generated)
+
+
+def test_pretransformed_normal_mode_potential_is_loaded_without_rotation(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    path = tmp_path / "ci_pot_normal_mode_inertial.inp"
+    expected = np.zeros((2, 2, 2))
+    expected[0, 0] = [1.0, 2.0]
+    expected[0, 1] = expected[1, 0] = [3.0, 4.0]
+    expected[1, 1] = [5.0, 6.0]
+    from oqs_pcm.io import io_write_pcm_normal_mode_potential_tensor
+
+    io_write_pcm_normal_mode_potential_tensor(path, expected)
+    config.paths.inertial_normal_mode_potential = path
+
+    nts, result = load_inertial_normal_mode_potential(config)
+
+    assert nts == 2
+    np.testing.assert_allclose(result, expected)
+
+
+def test_inertial_dipoles_are_not_rotated_again(tmp_path: Path) -> None:
+    dipole_path = tmp_path / "ci_mut_inertial.inp"
+    dipole_path.write_text(
+        "States 1 and 1 1.0 2.0 3.0\n"
+        "States 1 and 2 4.0 5.0 6.0\n"
+        "States 2 and 2 7.0 8.0 9.0\n",
+        encoding="utf-8",
+    )
+
+    result = load_postprocess_dipoles(
+        dipole_path,
+        total_states=2,
+        inertial_state_file=tmp_path / "must_not_be_read.dat",
+        dipole_basis="inertial",
+    )
+
+    np.testing.assert_allclose(result[0, 1], [4.0, 5.0, 6.0])

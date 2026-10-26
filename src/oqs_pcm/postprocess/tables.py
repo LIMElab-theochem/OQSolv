@@ -190,11 +190,14 @@ def load_postprocess_dipoles(
     *,
     total_states: int,
     inertial_state_file: str | Path | None = None,
+    dipole_basis: str = "frozen",
 ) -> np.ndarray:
-    """Load and optionally transform the complete dipole tensor."""
+    """Load the complete dipole tensor and transform it when still frozen."""
 
     dipoles = io_load_state_transition_dipole_tensor(dipole_file, nsts=total_states - 1)
-    if inertial_state_file is not None:
+    if dipole_basis not in {"frozen", "inertial"}:
+        raise ValueError("`dipole_basis` must be `frozen` or `inertial`.")
+    if dipole_basis == "frozen" and inertial_state_file is not None:
         inertial_states = io_load_matrix(inertial_state_file)
         dipoles = transform_state_transition_observable_to_basis(dipoles, inertial_states)
     return dipoles
@@ -252,6 +255,7 @@ def write_notebook_equivalent_tables(
             dipole_file,
             total_states=config.problem.nsts,
             inertial_state_file=inertial_state_file,
+            dipole_basis=config.postprocess.dipole_basis,
         )
         effective_selected_states = selected_state_indices
         if effective_selected_states is None and config.problem.selected_states is not None:

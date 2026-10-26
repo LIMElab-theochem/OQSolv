@@ -70,6 +70,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument("--output-dir", type=Path, help="Override [paths].output_dir for this run.")
     run_parser.add_argument("--normal-mode-potential", type=Path, help="Override [paths].normal_mode_potential.")
+    run_parser.add_argument(
+        "--inertial-normal-mode-potential",
+        type=Path,
+        help="Override [paths].inertial_normal_mode_potential.",
+    )
     run_parser.add_argument("--sm12t", type=Path, help="Override [paths].sm12t.")
     run_parser.add_argument("--lambda-file", type=Path, help="Override [paths].lambda_file.")
     run_parser.add_argument("--dipoles", type=Path, help="Override [postprocess].dipoles.")
@@ -77,7 +82,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--diagonalization-states", type=int)
     run_parser.add_argument("--resolution-of-identity-states", type=int)
     run_parser.add_argument("--corrected-states", type=int)
-    run_parser.add_argument("--potential-basis", choices=("normal_mode", "frozen"))
+    run_parser.add_argument(
+        "--potential-basis",
+        choices=("normal_mode", "normal_mode_inertial", "frozen"),
+    )
     for option in (
         "build_cavity_mode_basis",
         "build_potential_modes",
@@ -120,6 +128,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--dipoles",
         type=Path,
         help="Override [postprocess].dipoles from the TOML file.",
+    )
+    postprocess_parser.add_argument(
+        "--dipole-basis",
+        choices=("frozen", "inertial"),
+        help="Override [postprocess].dipole_basis from the TOML file.",
     )
     postprocess_parser.add_argument(
         "--delta-scf",
@@ -201,6 +214,7 @@ def apply_run_overrides(config, args):
     for argument, field in (
         ("output_dir", "output_dir"),
         ("normal_mode_potential", "normal_mode_potential"),
+        ("inertial_normal_mode_potential", "inertial_normal_mode_potential"),
         ("sm12t", "sm12t"),
         ("lambda_file", "lambda_file"),
     ):
@@ -336,6 +350,8 @@ def main() -> None:
         output_dir = args.output_dir or config.postprocess.output_dir
         dipoles = args.dipoles or config.postprocess.dipoles
         delta_scf = args.delta_scf if args.delta_scf is not None else config.postprocess.delta_scf
+        if args.dipole_basis is not None:
+            config = replace(config, postprocess=replace(config.postprocess, dipole_basis=args.dipole_basis))
         if output_dir is None:
             raise SystemExit("Missing postprocess output directory. Set [postprocess].output_dir or pass --output-dir.")
         selected_state_indices = None

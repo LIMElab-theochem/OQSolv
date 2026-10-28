@@ -89,9 +89,16 @@ coupling object.
 
 - `cavity.py` and `potential.py` handle the PCM cavity-mode representation and
   the normal-mode transformation.
-- `cavity.py` stores `S^(-1/2) T` in `Sm12T.dat`; `io.py` transposes it on
-  input so potential transformation applies `T^dagger S^(-1/2)`, matching
-  Eqs. 22 and 24 of the published OQS-PCM(omega) formulation.
+- `cavity.py` stores `S^(-1/2) T` in `Sm12T.dat` with tesserae as rows and
+  modes as columns. Potentials store tesserae on their last axis and
+  `potential.py` multiplies that axis on the right by `Sm12T`. This is the
+  row-vector form of applying `T^dagger S^(-1/2)` to a column potential and
+  matches Eqs. 22 and 24 of the published OQS-PCM(omega) formulation without
+  an intermediate matrix transpose.
+- `problem.diagonalization_states` controls the dimension of the Hamiltonian
+  diagonalized by a solver variant. `problem.corrected_states` controls only
+  how many target states are solved and exported. It must not be used as a
+  proxy for the diagonalization-space dimension when comparing calculations.
 - `dielectric.py` maps a frequency-dependent dielectric model to kernel
   factors.
 - `models/pcm.py` combines cavity information, dielectric factors, and the

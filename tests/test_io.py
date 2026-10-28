@@ -4,7 +4,20 @@ from pathlib import Path
 
 import numpy as np
 
-from oqs_pcm.io import io_write_named_results, io_write_pcm_normal_mode_potential_tensor
+from oqs_pcm.io import (
+    io_load_normal_mode_transformation_matrix,
+    io_write_named_results,
+    io_write_pcm_normal_mode_potential_tensor,
+)
+
+
+def test_load_sm12t_preserves_native_tessera_by_mode_orientation(tmp_path: Path) -> None:
+    sm12t = tmp_path / "Sm12T.dat"
+    sm12t.write_text("1 2\n3 4\n", encoding="utf-8")
+
+    loaded = io_load_normal_mode_transformation_matrix(sm12t)
+
+    np.testing.assert_allclose(loaded, [[1.0, 2.0], [3.0, 4.0]])
 
 
 def test_write_named_results_creates_expected_files(tmp_path: Path) -> None:

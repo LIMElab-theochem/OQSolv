@@ -44,9 +44,14 @@ def io_load_pcm_lambda_eigenvalues(path: str | Path) -> np.ndarray:
 
 
 def io_load_normal_mode_transformation_matrix(path: str | Path) -> np.ndarray:
-    """Load the normal-mode transformation matrix used for coupling tensors."""
+    """Load ``Sm12T`` in its native ``(tessera, mode)`` orientation.
 
-    return io_load_numeric_table(path).T
+    ``Sm12T.dat`` stores ``S^(-1/2) T`` with tesserae in rows and cavity
+    modes in columns.  Consumers that store coupling vectors as rows should
+    multiply by this matrix on the right; no transpose is needed here.
+    """
+
+    return io_load_numeric_table(path)
 
 
 def io_write_vector(path: str | Path, values: np.ndarray) -> None:

@@ -65,17 +65,35 @@ def pcm_add_nuclear_potential_to_state_diagonals(ve: np.ndarray, nuclear: np.nda
     return result
 
 
-def transform_coupling_tensor_to_normal_modes(coupling_tensor: np.ndarray, transformation_matrix: np.ndarray) -> np.ndarray:
+def transform_coupling_tensor_to_normal_modes(
+    coupling_tensor: np.ndarray,
+    sm12t: np.ndarray,
+) -> np.ndarray:
     """Transform a state-coupling tensor to the normal-mode representation.
 
-    In the current PCM workflow this acts on the tensor of state/transition
-    electrostatic potentials. The same algebra also applies more generally to
-    any coupling tensor resolved over cavity channels.
+    The input stores each state/transition potential as a row along its last
+    axis, with shape ``(..., tessera)``.  ``Sm12T`` is stored as
+    ``(tessera, mode)`` and is therefore applied on the right:
+
+    ``V_normal[..., mode] = V_frozen[..., tessera] @ Sm12T[tessera, mode]``.
+
+    This is the row-vector form of ``Sm12T.T @ V`` and avoids an unnecessary
+    transpose/reordering of the coupling tensor.  The same algebra applies
+    more generally to any coupling tensor resolved over cavity channels.
     """
 
-    channel_first = np.transpose(coupling_tensor, (2, 0, 1))
-    transformed = np.tensordot(transformation_matrix, channel_first, axes=(1, 0))
-    return np.transpose(transformed, (1, 2, 0))
+    coupling_tensor = np.asarray(coupling_tensor)
+    sm12t = np.asarray(sm12t)
+    if coupling_tensor.ndim < 1:
+        raise ValueError("The coupling tensor must have a cavity-channel axis.")
+    if sm12t.ndim != 2:
+        raise ValueError("Sm12T must be a two-dimensional (tessera, mode) matrix.")
+    if coupling_tensor.shape[-1] != sm12t.shape[0]:
+        raise ValueError(
+            "The coupling tensor's last axis must match the Sm12T tessera axis: "
+            f"{coupling_tensor.shape[-1]} != {sm12t.shape[0]}."
+        )
+    return np.matmul(coupling_tensor, sm12t)
 
 
 def pcm_load_normal_mode_potential_tensor(path: str, nsts: int) -> tuple[int, np.ndarray]:

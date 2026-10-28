@@ -8,7 +8,34 @@ from oqs_pcm.potential import (
     pcm_load_frozen_state_transition_potential_tensor,
     pcm_load_ground_normal_mode_potential,
     pcm_load_normal_mode_potential_tensor,
+    transform_coupling_tensor_to_normal_modes,
 )
+
+
+def test_normal_mode_transform_right_multiplication_matches_column_form() -> None:
+    potential = np.arange(12.0).reshape(2, 2, 3)
+    sm12t = np.array(
+        [
+            [1.0, 0.2],
+            [-0.5, 2.0],
+            [0.3, -0.7],
+        ]
+    )
+
+    transformed = transform_coupling_tensor_to_normal_modes(potential, sm12t)
+    expected = np.stack(
+        [sm12t.T @ potential[i, j] for i in range(2) for j in range(2)]
+    ).reshape(2, 2, 2)
+
+    np.testing.assert_allclose(transformed, expected)
+
+
+def test_normal_mode_transform_rejects_incompatible_tessera_axis() -> None:
+    potential = np.zeros((2, 2, 3))
+    sm12t = np.zeros((4, 2))
+
+    with np.testing.assert_raises(ValueError):
+        transform_coupling_tensor_to_normal_modes(potential, sm12t)
 
 
 def test_load_frozen_state_transition_potential_tensor_streams_legacy_format(tmp_path: Path) -> None:

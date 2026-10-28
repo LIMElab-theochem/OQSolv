@@ -100,9 +100,10 @@ def build_cavity_mode_basis(
     lambda_values = eigenvalues[order]
     eigenvectors = choose_stable_eigenvector_signs(eigenvectors[:, order])
     # NumPy stores eigenvectors as columns, so `eigenvectors` is the article's
-    # T matrix. Store S^(-1/2) T on disk. The normal-mode loader transposes
-    # that file before applying T^dagger S^(-1/2) to potentials, as required by
-    # Eqs. 22 and 24 of the published OQS-PCM(omega) formulation.
+    # T matrix. Store S^(-1/2) T on disk in its native (tessera, mode)
+    # orientation. Potentials are stored with tesserae on their last axis and
+    # are multiplied by this matrix on the right, which is the row-vector form
+    # of T^dagger S^(-1/2) applied to a column potential.
     sm12t = s_minus_half @ eigenvectors
     return lambda_values, sm12t
 

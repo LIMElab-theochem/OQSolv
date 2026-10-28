@@ -11,12 +11,15 @@ class PathsConfig:
     cavity: Path
     ci_potential: Path
     normal_mode_potential: Path
-    ci_energy: Path
     sm12t: Path
     lambda_file: Path
     output_dir: Path
+    ci_energy: Path | None = None
     inertial_cache_dir: Path | None = None
     inertial_normal_mode_potential: Path | None = None
+    inertial_energy: Path | None = None
+    inertial_energy_offset: Path | None = None
+    inertial_dipoles: Path | None = None
 
 
 @dataclass(slots=True)
@@ -175,6 +178,9 @@ def load_config(path: str | Path) -> AppConfig:
     paths_data = dict(data["paths"])
     paths_data.setdefault("inertial_cache_dir", None)
     paths_data.setdefault("inertial_normal_mode_potential", None)
+    paths_data.setdefault("inertial_energy", None)
+    paths_data.setdefault("inertial_energy_offset", None)
+    paths_data.setdefault("inertial_dipoles", None)
     for key, value in paths_data.items():
         if value is not None:
             paths_data[key] = Path(value)
@@ -201,8 +207,21 @@ def load_config(path: str | Path) -> AppConfig:
     safety_data.setdefault("min_free_disk_gb", 4.0)
     safety_data.setdefault("disk_safety_factor", 1.25)
 
+    paths = PathsConfig(**paths_data)
+    direct_inertial_route = (
+        execution_data["potential_basis"] == "normal_mode_inertial"
+        and paths.inertial_normal_mode_potential is not None
+        and paths.inertial_energy is not None
+    )
+    if paths.ci_energy is None and not direct_inertial_route:
+        raise ValueError(
+            "`paths.ci_energy` is required unless the direct inertial-input "
+            "route supplies both inertial inputs with "
+            "`execution.potential_basis = normal_mode_inertial`."
+        )
+
     config = AppConfig(
-        paths=PathsConfig(**paths_data),
+        paths=paths,
         problem=ProblemConfig(**problem_data),
         execution=ExecutionConfig(**execution_data),
         dielectric=DielectricConfig(**data["dielectric"]),

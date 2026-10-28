@@ -33,6 +33,29 @@ def test_cli_parser_accepts_fit_cutoff_variant() -> None:
     assert args.variants == ["fit_cutoff"]
 
 
+def test_cli_parser_accepts_direct_inertial_paths() -> None:
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "run",
+            "example_config.toml",
+            "--inertial-normal-mode-potential",
+            "v_inertial.inp",
+            "--inertial-energy",
+            "e_inertial.inp",
+            "--inertial-energy-offset",
+            "e_offset.inp",
+            "--inertial-dipoles",
+            "mu_inertial.inp",
+        ]
+    )
+
+    assert str(args.inertial_normal_mode_potential) == "v_inertial.inp"
+    assert str(args.inertial_energy) == "e_inertial.inp"
+    assert str(args.inertial_energy_offset) == "e_offset.inp"
+    assert str(args.inertial_dipoles) == "mu_inertial.inp"
+
+
 def test_cli_parser_accepts_figures_command() -> None:
     parser = build_parser()
     args = parser.parse_args(["figures", "all", "data", "out", "--fontsize", "14"])
@@ -54,6 +77,10 @@ def test_cli_parser_accepts_postprocess_command() -> None:
             "tables",
             "--dipoles",
             "ci_mut.inp",
+            "--inertial-dipoles",
+            "ci_mut_inertial.inp",
+            "--inertial-energy-offset",
+            "ci_energy_inertial_offset.inp",
             "--delta-scf",
             "-0.01",
             "--convergence-root",
@@ -66,6 +93,8 @@ def test_cli_parser_accepts_postprocess_command() -> None:
     assert str(args.config) == "example_config.toml"
     assert str(args.output_dir) == "tables"
     assert str(args.dipoles) == "ci_mut.inp"
+    assert str(args.inertial_dipoles) == "ci_mut_inertial.inp"
+    assert str(args.inertial_energy_offset) == "ci_energy_inertial_offset.inp"
     assert args.delta_scf == -0.01
     assert args.convergence_root == [["50", "out50"]]
 

@@ -16,7 +16,9 @@ from oqs_pcm.postprocess.tables import (
     write_absolute_energy_table,
     write_ground_state_convergence_table,
     write_spectrum_table,
+    write_notebook_equivalent_tables,
 )
+from oqs_pcm.workflow import load_inertial_energy_offset
 
 
 def test_pcm_reference_shift_adds_dynamic_work_for_inertial_reference(monkeypatch) -> None:
@@ -62,6 +64,76 @@ def test_absolute_energy_table_applies_reference_shift_and_delta_scf(tmp_path: P
 
     assert output == tmp_path / "en.txt"
     assert np.allclose(np.loadtxt(output), [0.12, 0.22])
+
+
+def test_direct_inertial_offset_is_separate_from_excitation_energies(tmp_path: Path) -> None:
+    energy_path = tmp_path / "ci_energy_inertial.inp"
+    offset_path = tmp_path / "ci_energy_inertial_offset.inp"
+    energy_path.write_text("0.0\n0.2\n", encoding="utf-8")
+    offset_path.write_text("-0.35\n", encoding="utf-8")
+    config = SimpleNamespace(
+        execution=SimpleNamespace(
+            potential_basis="normal_mode_inertial",
+            reuse_inertial_cache=True,
+        ),
+        paths=SimpleNamespace(
+            inertial_energy=energy_path,
+            inertial_energy_offset=offset_path,
+        ),
+    )
+
+    assert load_inertial_energy_offset(config) == -0.35
+
+
+def test_direct_inertial_offset_is_added_to_absolute_level_tables(
+    tmp_path: Path, monkeypatch
+) -> None:
+    solver_root = tmp_path / "solver"
+    io_write_named_results(solver_root / "ss_pol", np.array([0.2, 0.4]), np.eye(2))
+    energy_path = tmp_path / "ci_energy_inertial.inp"
+    offset_path = tmp_path / "ci_energy_inertial_offset.inp"
+    energy_path.write_text("0.0\n0.2\n", encoding="utf-8")
+    offset_path.write_text("-0.35\n", encoding="utf-8")
+    config = SimpleNamespace(
+        paths=SimpleNamespace(
+            output_dir=solver_root,
+            normal_mode_potential="v0.inp",
+            lambda_file="Lambda.dat",
+            inertial_energy=energy_path,
+            inertial_energy_offset=offset_path,
+            inertial_dipoles=None,
+        ),
+        problem=SimpleNamespace(
+            nsts=2,
+            selected_states=None,
+            optical_window_min_ev=1.63,
+            optical_window_max_ev=3.26,
+        ),
+        execution=SimpleNamespace(
+            potential_basis="normal_mode_inertial",
+            reuse_inertial_cache=True,
+            solve_inertial_basis=True,
+        ),
+        postprocess=SimpleNamespace(
+            dipoles=None,
+            dipole_basis="frozen",
+            oscillator_strength_mode=None,
+        ),
+        dielectric=object(),
+    )
+    monkeypatch.setattr(
+        "oqs_pcm.postprocess.tables.compute_pcm_reference_polarization_shift",
+        lambda _: 0.1,
+    )
+
+    write_notebook_equivalent_tables(
+        config,
+        output_dir=tmp_path / "tables",
+        include_levels=True,
+        include_spectra=False,
+    )
+
+    assert np.allclose(np.loadtxt(tmp_path / "tables" / "ensspol.txt"), [-0.05, 0.15])
 
 
 def test_spectrum_table_uses_energy_differences_so_constant_shift_cancels(tmp_path: Path) -> None:

@@ -51,7 +51,16 @@ Important fields:
 
 - `paths.ci_potential`: input used to build the normal-mode potential
 - `paths.normal_mode_potential`: output file for the transformed potential, and later input for the solver
-- `paths.ci_energy`: CI energies file
+- `paths.ci_energy`: CI energies file for the generated and intermediate
+  routes; it may be omitted only for the complete direct inertial-input route
+- `paths.inertial_normal_mode_potential`: optional complete normal-mode
+  potential already transformed to the inertial basis
+- `paths.inertial_energy`: optional complete inertial energy vector in Hartree,
+  including the ground state shifted to zero
+- `paths.inertial_energy_offset`: one-line inertial ground-state energy relative
+  to the frozen reference; required for absolute levels in the direct route
+- `paths.inertial_dipoles`: optional complete state/transition dipole tensor
+  already expressed in the inertial basis
 - `paths.sm12t`: normal-mode transformation matrix
 - `paths.lambda_file`: `Lambda.dat`
 - `paths.output_dir`: directory for solver results
@@ -90,8 +99,10 @@ Execution switches:
   solve and use the inertial basis before running downstream variants such as
   `ss_pol`, `full`, `bo`, `cutoff`, and `fit_cutoff`
 - `reuse_inertial_cache`:
-  if the inertial basis is requested and cached inertial files already exist,
-  reuse them instead of recomputing
+  reuse an existing inertial calculation instead of recomputing it.  There are
+  two reuse modes; the complete direct-input mode is described below, while
+  the intermediate mode reuses `newenergies.dat` and `newstates.dat` and
+  transforms the available frozen normal-mode data in memory.
 - `write_inertial_potentials` and `write_inertial_dipoles`:
   opt-in exports of complete potential and dipole tensors in the inertial basis;
   both default to `false`
@@ -99,16 +110,25 @@ Execution switches:
 Practical rule:
 
 - you may skip the normal-mode rebuild and still recompute the inertial basis
-- you may reuse the inertial basis only when the normal-mode tensor is being
-  reused too
+- for direct complete-input reuse, set `build_cavity_mode_basis = false`,
+  `build_potential_modes = false`, `solve_inertial_basis = true`, and
+  `reuse_inertial_cache = true`
+- when `paths.inertial_dipoles` is provided on that route, postprocessing uses
+  it directly as an inertial-basis tensor; it does not transform it again
 - `fit_cutoff` follows the same basis-choice rule as `cutoff`; it differs only
   by using `[problem].fit_epsilon` and `[problem].fit_cutoff`
 
 ### Inertial-basis artifacts
 
-When `solve_inertial_basis = true`, set either export switch to write the
-corresponding complete-basis artifact below
-`[paths].output_dir/inertial_artifacts/`:
+When `solve_inertial_basis = true`, OQSolv always writes the small shifted
+energy artifact below `[paths].output_dir/inertial_artifacts/`:
+
+- `ci_energy_inertial.inp`: the complete inertial energy vector in Hartree,
+  shifted so that the ground-state entry is zero
+- `ci_energy_inertial_offset.inp`: one-line ground-state energy of the
+  unshifted inertial reference relative to the frozen ground-state reference
+
+The following complete-basis artifacts are large and remain opt-in:
 
 - `ci_pot_inertial.inp` and `ci_pot_normal_mode_inertial.inp` when
   `write_inertial_potentials = true`
@@ -116,15 +136,44 @@ corresponding complete-basis artifact below
 
 These files contain the full `N x N` basis used by the run. They are not reduced
 when `problem.selected_states` is set; state selection is applied only to the
-subsequent solver or postprocessing calculation. The two potential exports are
-independent of whether the normal-mode tensor was generated in the same run.
+subsequent solver or postprocessing calculation.
 
-An already transformed normal-mode potential can be reused by setting
-`execution.potential_basis = "normal_mode_inertial"` and providing
-`paths.inertial_normal_mode_potential`. This advanced route must use the
-matching inertial energy cache and does not regenerate inertial artifacts. The
-default and recommended route remains `potential_basis = "normal_mode"`, in
-which OQSolv performs the transformation itself.
+### Three inertial workflows
+
+OQSolv supports three deliberately distinct workflows:
+
+1. **New inertial calculation.** Use `potential_basis = "normal_mode"` with
+   `solve_inertial_basis = true`. OQSolv builds or reads
+   `ci_pot_normal_mode.inp`, solves the inertial reference problem, and writes
+   `newenergies.dat`, `newstates.dat`, and the shifted
+   `ci_energy_inertial.inp`. Set `write_inertial_potentials = true` and/or
+   `write_inertial_dipoles = true` if those complete artifacts will be reused.
+
+2. **Intermediate cache reuse.** This is for a calculation that has
+   `newenergies.dat` and `newstates.dat` but did not write the transformed
+   potential or dipoles. Keep `potential_basis = "normal_mode"`, set
+   `reuse_inertial_cache = true`, and provide the frozen normal-mode potential.
+   OQSolv loads both cache files, transforms the potential in memory, and can
+   transform frozen dipoles during postprocessing. It can also regenerate the
+   inertial artifacts by enabling the two export switches. Both cache files are
+   required; `newstates.dat` alone is insufficient.
+
+3. **Direct complete-input reuse.** Use
+   `potential_basis = "normal_mode_inertial"` with
+   `reuse_inertial_cache = true`, and provide
+   `paths.inertial_normal_mode_potential` and `paths.inertial_energy`. The
+   latter must be the shifted `ci_energy_inertial.inp`. For absolute level
+   energies and convergence tables, also provide
+   `paths.inertial_energy_offset`, generated alongside it. This route does not
+   read `ci_energy.inp`, `newenergies.dat`, or `newstates.dat`, and never
+   rotates the supplied potential again. To postprocess oscillator strengths
+   without a state-cache transformation, also provide
+   `paths.inertial_dipoles`; it is selected automatically unless an explicit
+   dipole file is supplied.
+
+The generated route is the default. Direct reuse is not available merely
+because an inertial solve was performed: the required complete artifacts must
+first have been written.
 
 ## Input Files
 
@@ -133,6 +182,17 @@ Minimal format summary:
 - `ci_energy.inp`:
   whitespace-separated numeric table whose last column contains excitation
   energies in eV
+- `ci_energy_inertial.inp` (when used through `paths.inertial_energy`):
+  one atomic-unit energy per state, including the ground state at zero; it is
+  already the inertial reference vector and is not converted or prepended
+- `ci_energy_inertial_offset.inp` (when used through
+  `paths.inertial_energy_offset`): one atomic-unit value restoring the
+  inertial ground-state reference relative to frozen energies
+- `ci_pot_normal_mode_inertial.inp` (when used through
+  `paths.inertial_normal_mode_potential`): complete normal-mode potential in
+  the inertial basis; it is loaded without a second transformation
+- `ci_mut_inertial.inp` (when used through `paths.inertial_dipoles`): complete
+  state/transition dipole tensor in the inertial basis
 - PCM `ci_pot.inp`:
   text file containing state/transition electrostatic potentials on PCM cavity
   tesserae
@@ -232,10 +292,20 @@ delta_scf = <Psi|H(0) + V/2|Psi>_solvent - <Psi|H(0)|Psi>_gas
 It must be taken from the in-solvent and in-vacuo electronic-structure
 calculations. OQSolv does not infer it from `newenergies.dat`.
 
-Set `postprocess.dipole_basis = "inertial"` when `dipoles` already contains
-the complete dipole tensor in the inertial basis. OQSolv then uses it directly
-and does not apply the inertial-state transformation again. Leave the default
-`"frozen"` when the dipoles are in the original frozen-solvent basis.
+Set `postprocess.dipole_basis = "inertial"` when an explicitly selected
+`dipoles` file already contains the complete dipole tensor in the inertial
+basis. OQSolv then uses it directly and does not apply the inertial-state
+transformation again. Leave the default `"frozen"` when the dipoles are in the
+original frozen-solvent basis. On the complete-input reuse route, omit the
+postprocess `dipoles` override and set `paths.inertial_dipoles`; OQSolv selects
+that inertial file automatically.
+
+For direct inertial-input reuse, `ci_energy_inertial.inp` defines the inertial
+ground state as zero. Transition energies and oscillator strengths are
+unchanged by this choice, but absolute level energies require
+`paths.inertial_energy_offset`, which is added together with `ww` and
+`delta_scf`. The offset is obtained from the unshifted inertial
+`newenergies.dat`; it must not be inferred from the shifted excitation file.
 
 `oscillator_strength_mode` controls how oscillator strengths are evaluated from
 the solved states. Leave it unset for normal use: OQSolv uses the

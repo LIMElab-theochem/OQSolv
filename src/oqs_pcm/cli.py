@@ -75,6 +75,13 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Override [paths].inertial_normal_mode_potential.",
     )
+    run_parser.add_argument("--inertial-energy", type=Path, help="Override [paths].inertial_energy.")
+    run_parser.add_argument(
+        "--inertial-energy-offset",
+        type=Path,
+        help="Override [paths].inertial_energy_offset.",
+    )
+    run_parser.add_argument("--inertial-dipoles", type=Path, help="Override [paths].inertial_dipoles.")
     run_parser.add_argument("--sm12t", type=Path, help="Override [paths].sm12t.")
     run_parser.add_argument("--lambda-file", type=Path, help="Override [paths].lambda_file.")
     run_parser.add_argument("--dipoles", type=Path, help="Override [postprocess].dipoles.")
@@ -128,6 +135,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--dipoles",
         type=Path,
         help="Override [postprocess].dipoles from the TOML file.",
+    )
+    postprocess_parser.add_argument(
+        "--inertial-dipoles",
+        type=Path,
+        help="Override [paths].inertial_dipoles for automatic cache reuse.",
+    )
+    postprocess_parser.add_argument(
+        "--inertial-energy-offset",
+        type=Path,
+        help="Override [paths].inertial_energy_offset for absolute levels.",
     )
     postprocess_parser.add_argument(
         "--dipole-basis",
@@ -215,6 +232,9 @@ def apply_run_overrides(config, args):
         ("output_dir", "output_dir"),
         ("normal_mode_potential", "normal_mode_potential"),
         ("inertial_normal_mode_potential", "inertial_normal_mode_potential"),
+        ("inertial_energy", "inertial_energy"),
+        ("inertial_energy_offset", "inertial_energy_offset"),
+        ("inertial_dipoles", "inertial_dipoles"),
         ("sm12t", "sm12t"),
         ("lambda_file", "lambda_file"),
     ):
@@ -294,10 +314,15 @@ def main() -> None:
             print(f"Inertial energies written to {energy_path}")
             print(f"Inertial states written to {state_path}")
             print(f"Energy shape: {inertial_energies.shape}; state shape: {inertial_states.shape}")
-            if config.execution.write_inertial_potentials or config.execution.write_inertial_dipoles:
+            if (
+                config.execution.write_inertial_potentials
+                or config.execution.write_inertial_dipoles
+                or get_inertial_artifact_paths(config)["energy"].exists()
+            ):
                 for name, path in get_inertial_artifact_paths(config).items():
                     if path.exists() and (
-                        (name != "dipoles" and config.execution.write_inertial_potentials)
+                        name in {"energy", "energy_offset"}
+                        or (name != "dipoles" and name != "energy" and config.execution.write_inertial_potentials)
                         or (name == "dipoles" and config.execution.write_inertial_dipoles)
                     ):
                         print(f"Inertial {name} written to {path}")
@@ -347,8 +372,22 @@ def main() -> None:
             path_updates["output_dir"] = args.solver_output_dir
         if path_updates:
             config = replace(config, paths=replace(config.paths, **path_updates))
+        inertial_path_updates = {}
+        if args.inertial_dipoles is not None:
+            inertial_path_updates["inertial_dipoles"] = args.inertial_dipoles
+        if args.inertial_energy_offset is not None:
+            inertial_path_updates["inertial_energy_offset"] = args.inertial_energy_offset
+        if inertial_path_updates:
+            config = replace(
+                config,
+                paths=replace(config.paths, **inertial_path_updates),
+            )
         output_dir = args.output_dir or config.postprocess.output_dir
-        dipoles = args.dipoles or config.postprocess.dipoles
+        # Leave the configured source unresolved here.  The postprocessing
+        # layer can then select a complete inertial dipole cache automatically
+        # when reuse_inertial_cache is enabled; an explicit CLI path still
+        # takes precedence.
+        dipoles = args.dipoles
         delta_scf = args.delta_scf if args.delta_scf is not None else config.postprocess.delta_scf
         if args.dipole_basis is not None:
             config = replace(config, postprocess=replace(config.postprocess, dipole_basis=args.dipole_basis))

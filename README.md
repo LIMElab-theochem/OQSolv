@@ -74,6 +74,18 @@ For large systems, inspect resource requirements before running:
 oqs-pcm estimate-memory my_calculation.toml
 ```
 
+There are three inertial workflows: a new solve, an intermediate reuse mode
+that reads `newenergies.dat` and `newstates.dat` and transforms available
+normal-mode data in memory, and direct reuse of complete inertial artifacts.
+For the direct mode, set `execution.potential_basis = "normal_mode_inertial"`,
+`execution.reuse_inertial_cache = true`, and provide
+`paths.inertial_normal_mode_potential` plus `paths.inertial_energy`.  The latter
+must be the zeroed atomic-unit `ci_energy_inertial.inp`; an inertial solve alone
+does not produce the complete inputs required by this mode. `paths.inertial_dipoles`
+is needed for direct inertial-basis oscillator-strength postprocessing. For
+absolute level energies, also provide the one-line ground-state offset through
+`paths.inertial_energy_offset`.
+
 ## Theory
 
 OQS-PCM extends traditional continuum solvation by treating the solvent

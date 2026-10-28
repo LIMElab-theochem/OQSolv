@@ -11,7 +11,7 @@ from oqs_pcm.config import (
     ProblemConfig,
     SafetyConfig,
 )
-from oqs_pcm.workflow import get_inertial_cache_paths, should_recompute_inertial_basis
+from oqs_pcm.workflow import get_inertial_cache_paths, should_recompute_inertial_basis, uses_complete_inertial_inputs
 
 
 def _config(
@@ -143,3 +143,16 @@ def test_basis_choice_flag_remains_independent_from_cache_policy() -> None:
     assert config.execution.solve_inertial_basis is False
     # Cache policy remains a separate execution control.
     assert should_recompute_inertial_basis(config) is False
+
+
+def test_complete_inertial_input_route_is_detected() -> None:
+    config = _config(
+        build_potential_modes=False,
+        solve_inertial_basis=True,
+        reuse_inertial_cache=True,
+    )
+    config.execution.potential_basis = "normal_mode_inertial"
+    config.paths.inertial_normal_mode_potential = Path("/tmp/ci_pot_normal_mode_inertial.inp")
+    config.paths.inertial_energy = Path("/tmp/ci_energy_inertial.inp")
+
+    assert uses_complete_inertial_inputs(config) is True

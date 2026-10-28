@@ -69,6 +69,8 @@ optical_drude_start_index = 1
     assert config.execution.build_potential_modes is True
     assert config.execution.reuse_inertial_cache is False
     assert config.paths.output_dir == Path("/tmp/output")
+    assert config.paths.inertial_energy is None
+    assert config.paths.inertial_dipoles is None
     assert config.dielectric.drude_w == [0.1, 0.2]
     assert config.postprocess.output_dir == Path("/tmp/figure_tables")
     assert config.postprocess.dipoles == Path("/tmp/ci_mut.inp")
@@ -129,6 +131,61 @@ optical_drude_start_index = 1
     assert config.postprocess.oscillator_strength_mode is None
     assert config.problem.fit_cutoff == 0.5172311136437814
     assert config.problem.fit_epsilon == 2.0302901591898928
+
+
+def test_load_config_accepts_complete_inertial_input_paths(tmp_path: Path) -> None:
+    config_path = tmp_path / "test_config_direct_inertial.toml"
+    config_path.write_text(
+        """
+[paths]
+mat_sd = "/tmp/mat_SD.inp"
+cavity = "/tmp/cavity.inp"
+ci_potential = "/tmp/ci_pot.inp"
+normal_mode_potential = "/tmp/ci_pot_normal_mode.inp"
+sm12t = "/tmp/Sm12T.dat"
+lambda_file = "/tmp/Lambda.dat"
+output_dir = "/tmp/output"
+inertial_normal_mode_potential = "/tmp/ci_pot_normal_mode_inertial.inp"
+inertial_energy = "/tmp/ci_energy_inertial.inp"
+inertial_dipoles = "/tmp/ci_mut_inertial.inp"
+
+[problem]
+nsts = 2
+diagonalization_states = 2
+resolution_of_identity_states = 2
+corrected_states = 2
+convergence_tolerance = 1e-6
+mixing_window = 2
+cutoff = 0.1
+optical_window_min_ev = 1.0
+optical_window_max_ev = 2.0
+hartree_to_ev = 27.2114
+
+[execution]
+build_potential_modes = false
+solve_oqs_pcm = true
+solve_inertial_basis = true
+reuse_inertial_cache = true
+write_text_exports = true
+potential_basis = "normal_mode_inertial"
+
+[dielectric]
+debye_c = [0.47]
+debye_g = [1.0]
+drude_w = [0.1]
+drude_c = [0.3]
+drude_g = [0.5]
+optical_drude_start_index = 0
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.paths.ci_energy is None
+    assert config.paths.inertial_normal_mode_potential == Path("/tmp/ci_pot_normal_mode_inertial.inp")
+    assert config.paths.inertial_energy == Path("/tmp/ci_energy_inertial.inp")
+    assert config.paths.inertial_dipoles == Path("/tmp/ci_mut_inertial.inp")
 
 
 def test_load_config_accepts_legacy_build_normal_modes_key(tmp_path: Path) -> None:

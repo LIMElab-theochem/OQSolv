@@ -22,7 +22,7 @@ from oqs_pcm.postprocess.observables import (
     transform_state_transition_observable_to_basis,
 )
 from oqs_pcm.potential import pcm_load_ground_normal_mode_potential
-from oqs_pcm.workflow import get_inertial_cache_paths
+from oqs_pcm.workflow import get_inertial_cache_paths, load_inertial_energy_offset
 
 
 DEFAULT_LEVEL_EXPORTS = {
@@ -228,6 +228,8 @@ def write_notebook_equivalent_tables(
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     shift = compute_pcm_reference_polarization_shift(config)
+    if include_levels or include_convergence:
+        shift += load_inertial_energy_offset(config)
     level_files: list[Path] = []
     spectra_files: list[Path] = []
     convergence_files: list[Path] = []
@@ -246,16 +248,24 @@ def write_notebook_equivalent_tables(
                 )
 
     if include_spectra:
-        if dipole_file is None:
+        effective_dipole_file = dipole_file
+        effective_dipole_basis = config.postprocess.dipole_basis
+        if effective_dipole_file is None and config.execution.reuse_inertial_cache:
+            if config.paths.inertial_dipoles is not None:
+                effective_dipole_file = config.paths.inertial_dipoles
+                effective_dipole_basis = "inertial"
+        if effective_dipole_file is None:
+            effective_dipole_file = config.postprocess.dipoles
+        if effective_dipole_file is None:
             raise ValueError("`dipole_file` is required when spectra table generation is enabled.")
         inertial_state_file = None
         if config.execution.solve_inertial_basis:
             _, inertial_state_file = get_inertial_cache_paths(config)
         dipoles = load_postprocess_dipoles(
-            dipole_file,
+            effective_dipole_file,
             total_states=config.problem.nsts,
             inertial_state_file=inertial_state_file,
-            dipole_basis=config.postprocess.dipole_basis,
+            dipole_basis=effective_dipole_basis,
         )
         effective_selected_states = selected_state_indices
         if effective_selected_states is None and config.problem.selected_states is not None:

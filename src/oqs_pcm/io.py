@@ -67,6 +67,23 @@ def io_load_vector(path: str | Path) -> np.ndarray:
     return np.loadtxt(path, ndmin=1)
 
 
+def io_load_inertial_energy_vector(path: str | Path) -> np.ndarray:
+    """Load an inertial energy vector stored in atomic units.
+
+    Unlike ``ci_energy.inp``, an inertial energy artifact is a complete vector
+    in atomic units.  The direct-reuse artifact is shifted so that its first
+    entry is zero; the historical ``newenergies.dat`` cache may retain the
+    absolute inertial reference and is validated separately by the workflow.
+    The loader accepts the real or complex text representation emitted by
+    NumPy and rejects genuinely complex reference energies.
+    """
+
+    values = np.loadtxt(path, dtype=complex, ndmin=1)
+    if np.any(np.abs(np.imag(values)) > 1.0e-12):
+        raise ValueError(f"Inertial reference energies must be real: {path}")
+    return np.real(values)
+
+
 def io_load_matrix(path: str | Path) -> np.ndarray:
     """Load a two-dimensional numeric text export."""
 

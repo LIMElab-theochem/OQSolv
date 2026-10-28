@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -14,9 +15,12 @@ from oqs_pcm.config import (
 from oqs_pcm.io import io_load_state_transition_dipole_tensor
 from oqs_pcm.potential import pcm_load_normal_mode_potential_tensor
 from oqs_pcm.postprocess.tables import load_postprocess_dipoles
+from oqs_pcm.postprocess.tables import write_notebook_equivalent_tables
 from oqs_pcm.workflow import (
     ensure_normal_mode_potential,
+    load_inertial_energy_offset,
     load_inertial_normal_mode_potential,
+    load_inertial_energies,
     write_inertial_basis_artifacts,
 )
 
@@ -102,9 +106,17 @@ def test_write_inertial_artifacts_transforms_all_requested_observables(tmp_path:
     normal_mode = frozen + 100.0
     states = np.eye(2)
 
-    written = write_inertial_basis_artifacts(config, normal_mode, states)
+    written = write_inertial_basis_artifacts(config, normal_mode, states, np.array([0.2, 0.5]))
 
-    assert set(written) == {"frozen_potential", "normal_mode_potential", "dipoles"}
+    assert set(written) == {
+        "energy",
+        "energy_offset",
+        "frozen_potential",
+        "normal_mode_potential",
+        "dipoles",
+    }
+    assert np.allclose(np.loadtxt(written["energy"]), [0.0, 0.3])
+    assert np.allclose(np.loadtxt(written["energy_offset"]), [0.2])
     _, frozen_result = pcm_load_normal_mode_potential_tensor(written["frozen_potential"], 2)
     _, normal_result = pcm_load_normal_mode_potential_tensor(written["normal_mode_potential"], 2)
     expected_frozen = frozen.copy()
@@ -168,3 +180,103 @@ def test_inertial_dipoles_are_not_rotated_again(tmp_path: Path) -> None:
     )
 
     np.testing.assert_allclose(result[0, 1], [4.0, 5.0, 6.0])
+
+
+def test_direct_inertial_energy_input_precedes_legacy_cache(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    config.paths.inertial_energy = tmp_path / "ci_energy_inertial.inp"
+    config.paths.inertial_energy.write_text("0.0\n0.125\n", encoding="utf-8")
+    legacy_energy, legacy_states = config.paths.output_dir / "inertial_diag2" / "newenergies.dat", config.paths.output_dir / "inertial_diag2" / "newstates.dat"
+    legacy_energy.parent.mkdir(parents=True)
+    legacy_energy.write_text("0.0\n0.25\n", encoding="utf-8")
+    legacy_states.write_text("1 0\n0 1\n", encoding="utf-8")
+
+    result = load_inertial_energies(config)
+
+    np.testing.assert_allclose(result, [0.0, 0.125])
+
+
+def test_direct_inertial_offset_is_loaded_as_one_value(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    config.execution.potential_basis = "normal_mode_inertial"
+    config.paths.inertial_energy = tmp_path / "ci_energy_inertial.inp"
+    config.paths.inertial_energy_offset = tmp_path / "ci_energy_inertial_offset.inp"
+    config.paths.inertial_energy.write_text("0.0\n0.125\n", encoding="utf-8")
+    config.paths.inertial_energy_offset.write_text("-0.375\n", encoding="utf-8")
+
+    assert load_inertial_energy_offset(config) == -0.375
+
+
+def test_reuse_selects_complete_inertial_dipoles_for_postprocessing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config = make_config(tmp_path)
+    config.paths.output_dir = tmp_path / "solver"
+    config.paths.inertial_dipoles = tmp_path / "ci_mut_inertial.inp"
+    config.postprocess.dipoles = tmp_path / "ci_mut_frozen.inp"
+    result_dir = config.paths.output_dir / "ss_pol"
+    result_dir.mkdir(parents=True)
+    (result_dir / "newenergies.dat").write_text("0.0\n0.2\n", encoding="utf-8")
+    (result_dir / "newstates.dat").write_text("1 0\n0 1\n", encoding="utf-8")
+
+    captured = {}
+    monkeypatch.setattr(
+        "oqs_pcm.postprocess.tables.compute_pcm_reference_polarization_shift",
+        lambda _: 0.0,
+    )
+
+    def fake_load(path, **kwargs):
+        captured["path"] = path
+        captured["basis"] = kwargs["dipole_basis"]
+        return np.zeros((2, 2, 3))
+
+    monkeypatch.setattr("oqs_pcm.postprocess.tables.load_postprocess_dipoles", fake_load)
+
+    write_notebook_equivalent_tables(
+        config,
+        output_dir=tmp_path / "tables",
+        dipole_file=None,
+        include_levels=False,
+        include_spectra=True,
+    )
+
+    assert captured == {"path": config.paths.inertial_dipoles, "basis": "inertial"}
+
+
+def test_direct_inertial_solver_route_does_not_read_frozen_energy(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config = make_config(tmp_path)
+    config.paths.ci_energy = None
+    config.paths.inertial_normal_mode_potential = tmp_path / "ci_pot_normal_mode_inertial.inp"
+    config.paths.inertial_energy = tmp_path / "ci_energy_inertial.inp"
+    config.execution.potential_basis = "normal_mode_inertial"
+    config.execution.write_inertial_potentials = False
+    config.execution.write_inertial_dipoles = False
+    config.paths.inertial_energy.write_text("0.0\n0.125\n", encoding="utf-8")
+    from oqs_pcm.io import io_write_pcm_normal_mode_potential_tensor
+
+    io_write_pcm_normal_mode_potential_tensor(
+        config.paths.inertial_normal_mode_potential,
+        np.zeros((2, 2, 1)),
+    )
+    config.paths.lambda_file.write_text("1.0\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "oqs_pcm.workflow.build_dielectric_model",
+        lambda _: object(),
+    )
+    monkeypatch.setattr(
+        "oqs_pcm.workflow.build_pcm_kernels",
+        lambda **_: SimpleNamespace(optical_kernel=np.ones(1)),
+    )
+    monkeypatch.setattr(
+        "oqs_pcm.workflow.solve_born_oppenheimer_limit",
+        lambda *args: (np.array([0.0, 0.125]), np.eye(2)),
+    )
+
+    from oqs_pcm.workflow import solve_oqs_pcm
+
+    result = solve_oqs_pcm(config, requested_variants={"bo"})
+
+    assert "bo" in result

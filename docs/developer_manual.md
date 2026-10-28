@@ -414,9 +414,16 @@ The following conventions are part of the scientific interface:
 - `potential_basis = "normal_mode"` means that the input tensor is in the
   frozen normal-mode representation and is transformed to the inertial basis
   by the workflow.
+- The intermediate reuse route keeps `potential_basis = "normal_mode"` and
+  requires both `inertial_diag<N>/newenergies.dat` and
+  `inertial_diag<N>/newstates.dat`. It loads the cached reference and performs
+  the complete-basis potential/dipole transformations in memory as needed.
 - `potential_basis = "normal_mode_inertial"` means that the complete input
   tensor has already undergone that transformation. The workflow must not
-  rotate it a second time; it reuses the matching inertial energy cache.
+  rotate it a second time. With `paths.inertial_energy` it also consumes the
+  complete zeroed Hartree energy vector directly; it does not read the frozen
+  `ci_energy.inp` or require `newstates.dat`. This is the direct complete-input
+  route; it is distinct from the intermediate `normal_mode` cache route.
 - `potential_basis = "frozen"` transforms the original frozen PCM tensor and
   is retained as a generic validation route, not as a separate solver
   convention.
@@ -426,9 +433,20 @@ The following conventions are part of the scientific interface:
 - `postprocess.dipole_basis = "frozen"` requires the inertial-state matrix for
   dipole transformation. `"inertial"` consumes a complete already transformed
   dipole tensor and must not load or apply that matrix again.
+- When `execution.reuse_inertial_cache = true` and
+  `paths.inertial_dipoles` is set, the postprocessing resolver selects that
+  complete inertial tensor automatically unless the caller supplies an
+  explicit dipole path. This keeps solver reuse and oscillator-strength
+  postprocessing on the same basis.
 - When normal-mode potentials are generated in memory, artifact writing uses
   that tensor directly; it must not reread the text export merely to transform
   it.
+- Every inertial solve writes a shifted `ci_energy_inertial.inp` artifact.
+  It also writes the one-line unshifted ground-state offset in
+  `ci_energy_inertial_offset.inp`. Direct absolute-energy postprocessing must
+  add this offset because the direct solver Hamiltonian uses the inertial
+  ground state as zero.
+  Complete potential and dipole artifacts remain opt-in because of their size.
 
 The opt-in artifact flags are deliberately independent: potential and dipole
 exports can be requested separately, and both remain disabled by default.
@@ -439,13 +457,15 @@ Ad hoc validation runs may assign `paths.inertial_cache_dir` so several
 independent result directories share one validated `inertial_diag<N>` cache.
 This is developer infrastructure, not a normal user-facing workflow;
 ordinary configurations should continue to use `paths.output_dir` for the
-cache, and the override must remain absent from `example_config.toml`.
+legacy cache. Complete inertial input files are the stable reuse interface and
+do not need `inertial_cache_dir`.
 
 Developer-only validation may also set `execution.potential_basis` to
 `normal_mode`, `normal_mode_inertial`, or `frozen`. `normal_mode` uses the
-normal-mode coupling before the inertial transformation;
-`normal_mode_inertial` loads a complete potential already transformed to the
-inertial basis; and `frozen` uses the original cavity potential while reusing
+normal-mode coupling before the inertial transformation and supports the
+intermediate two-file inertial cache; `normal_mode_inertial` loads a complete
+potential already transformed to the inertial basis and its direct zeroed
+energy vector; and `frozen` uses the original cavity potential while reusing
 previously computed inertial states. The corresponding
 `postprocess.dipole_basis` declares whether the dipole file is still frozen or
 already inertial. These switches must not be confused with either the
@@ -453,8 +473,8 @@ normal-mode cache or the inertial-state cache.
 
 The public defaults should remain on the generated normal-mode route. The
 pre-transformed route is useful for controlled reuse and reproducibility, but
-must reject a missing or incompatible inertial cache and must never silently
-retransform the supplied tensor.
+must reject a missing or incompatible direct energy/potential input and must
+never silently retransform the supplied tensor.
 
 ## Validation and Regression
 

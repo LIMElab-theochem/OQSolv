@@ -48,6 +48,17 @@ oqs-pcm run CONFIG.toml --mode solve
 
 Run the configured OQS-PCM solver variants without preprocessing.
 
+For intermediate reuse of an inertial state cache when transformed artifacts
+were not written, keep `potential_basis = "normal_mode"` in the TOML and run:
+
+```bash
+oqs-pcm run CONFIG.toml --mode solve --solve-inertial-basis --reuse-inertial-cache --no-build-cavity-mode-basis --no-build-potential-modes
+```
+
+This requires both `inertial_diag<N>/newenergies.dat` and
+`inertial_diag<N>/newstates.dat`; the frozen normal-mode potential is
+transformed in memory.
+
 ```bash
 oqs-pcm run CONFIG.toml --mode all
 ```
@@ -69,10 +80,24 @@ Variants are: `ss_pol` (SS-pol), `full_nodisp_nodiss`, `full_nodiss`, `full`,
 ### `run` overrides
 
 ```bash
-oqs-pcm run CONFIG.toml --output-dir DIR --normal-mode-potential FILE --inertial-normal-mode-potential FILE --sm12t FILE --lambda-file FILE --dipoles FILE
+oqs-pcm run CONFIG.toml --output-dir DIR --normal-mode-potential FILE --inertial-normal-mode-potential FILE --inertial-energy FILE --inertial-energy-offset FILE --inertial-dipoles FILE --sm12t FILE --lambda-file FILE --dipoles FILE
 ```
 
 Override paths without editing the TOML.
+
+For a complete inertial-input reuse run, provide the pre-transformed potential
+and shifted energy paths; add the offset for absolute levels and the dipole
+path for direct inertial-basis spectra:
+
+```bash
+oqs-pcm run CONFIG.toml --mode solve --potential-basis normal_mode_inertial --inertial-normal-mode-potential ci_pot_normal_mode_inertial.inp --inertial-energy ci_energy_inertial.inp --inertial-energy-offset ci_energy_inertial_offset.inp --inertial-dipoles ci_mut_inertial.inp --reuse-inertial-cache
+```
+
+The energy file is already in Hartree and includes the zeroed ground state; the
+offset file is needed for absolute level energies.
+The potential is not rotated again, and `newstates.dat` is not needed.  With
+no explicit `--dipoles` override, postprocessing automatically uses
+`--inertial-dipoles` when cache reuse is enabled.
 
 ```bash
 oqs-pcm run CONFIG.toml --selected-states 1 5 --diagonalization-states 5 --resolution-of-identity-states 5 --corrected-states 5
@@ -110,10 +135,11 @@ oqs-pcm postprocess CONFIG.toml
 Generate level, spectrum, and configured convergence tables from solver outputs.
 
 ```bash
-oqs-pcm postprocess CONFIG.toml --output-dir DIR --solver-output-dir DIR --dipoles FILE --dipole-basis frozen --delta-scf VALUE
+oqs-pcm postprocess CONFIG.toml --output-dir DIR --solver-output-dir DIR --dipoles FILE --inertial-dipoles FILE --inertial-energy-offset FILE --dipole-basis frozen --delta-scf VALUE
 ```
 
-Override output, solver, dipole, basis, and external SCF-shift inputs.
+Override output, solver, dipole, inertial-cache dipole, basis, and external
+SCF-shift inputs.
 
 ```bash
 oqs-pcm postprocess CONFIG.toml --dipole-basis inertial --selected-states 1 5
